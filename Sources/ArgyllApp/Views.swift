@@ -396,6 +396,14 @@ struct ResultsView: View {
                 }
             }
 
+            if model.summary?.installed == true {
+                Text("Lightroom, Photoshop and other apps that manage colour themselves read the display profile when they start. Relaunch them to pick this one up.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .multilineTextAlignment(.center)
+                    .frame(maxWidth: 460)
+            }
+
             HStack(spacing: 12) {
                 Button("New run") { model.reset() }
                 if model.summary?.installed == true {

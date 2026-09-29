@@ -26,10 +26,13 @@ display" flow that runs the spectrophotometer and colorimeter in turn, stores th
 `.ccmx`, and applies it (`-X`) automatically whenever that colorimeter is used on that
 display. Show which correction is in force on the setup screen.
 
-## Lightroom pass-through measurement
-One measurement with the HL on a grey patch inside Lightroom Classic under two
-profiles, to confirm that Lightroom's own conversion reaches the panel intact on this
-macOS. Decides whether profiling matters for editing here or the preset alone does.
+## Lightroom pass-through measurement — done 2026-09-28
+sRGB grey 0.5 shown by Lightroom Classic measured 66.4 cd/m² with the corrected HL
+profile assigned and 65.2 with Generic RGB, against 65.7 for the same grey drawn by the
+system; a stale profile from Lightroom's earlier launch had given 34.6. Conclusions:
+Lightroom converts through the assigned profile, macOS honours what Lightroom hands
+it, and Lightroom reads the profile only at launch. The results screen now says to
+relaunch such apps after installing a profile.
 
 ## Release
 Photographer-facing README, LICENSE for the app's own code (MIT or Apache-2.0 beside
