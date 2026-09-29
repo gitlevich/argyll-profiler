@@ -55,8 +55,26 @@ public actor CorrectionSession {
     private var fitAverage: Double?
     private var fitMax: Double?
     private var written = false
+    /// The menu's last option number, once "Press 1 .. N:" has been seen and its options are still printing.
+    private var menuLastOption: Int?
 
     private static let fit = try! Regex("Fit error is avg ([0-9.]+), max ([0-9.]+)")
+    private static let menuHeader = try! Regex("Press 1 \\.\\. (\\d+):")
+    private static let optionLine = try! Regex("^\\s*(\\d+)\\) ")
+
+    /// Argyll discards typed-ahead input just before it reads a key, so a key must arrive only
+    /// after the prompt has fully printed. A short delay is the robust way to guarantee that.
+    private func sendNextKey(_ runner: ArgyllRunner) async {
+        guard !keys.isEmpty else { return }
+        let key = keys.removeFirst()
+        try? await Task.sleep(nanoseconds: 400_000_000)
+        runner.send(key)
+        switch keys.count {                // what the key just sent leads to
+        case 3: continuation.yield(.step(.spectrometer))   // spectrometer port selected
+        case 1: continuation.yield(.step(.computing))      // "3" sent
+        default: break
+        }
+    }
 
     public init(options: CorrectionOptions) {
         self.options = options
@@ -88,6 +106,12 @@ public actor CorrectionSession {
             switch event {
             case .line(let line):
                 continuation.yield(.line(line))
+                // The menu is answered only after its last option line has been printed.
+                if let last = menuLastOption, let m = line.firstMatch(of: Self.optionLine),
+                   Int(m[1].substring ?? "") == last {
+                    menuLastOption = nil
+                    await sendNextKey(runner)
+                }
                 if let m = line.firstMatch(of: Self.fit) {
                     fitAverage = Double(m[1].substring ?? "")
                     fitMax = Double(m[2].substring ?? "")
@@ -97,15 +121,10 @@ public actor CorrectionSession {
             case .progress(let done, let total):
                 continuation.yield(.progress(done: done, total: total))
             case .prompt(let prompt):
-                if case .other(let text) = prompt, text.contains("Press 1 .. ") || text.contains("Select device") {
-                    guard !keys.isEmpty else { break }
-                    let key = keys.removeFirst()
-                    runner.send(key)
-                    switch keys.count {                // what the key we just sent leads to
-                    case 3: continuation.yield(.step(.spectrometer))   // spectrometer port selected
-                    case 1: continuation.yield(.step(.computing))      // "3" sent
-                    default: break
-                    }
+                if case .other(let text) = prompt, let m = text.firstMatch(of: Self.menuHeader) {
+                    menuLastOption = Int(m[1].substring ?? "")          // answer once "N) …" has printed
+                } else if case .other(let text) = prompt, text.contains("Select device") {
+                    await sendNextKey(runner)
                 } else {
                     continuation.yield(.prompt(prompt))
                 }
