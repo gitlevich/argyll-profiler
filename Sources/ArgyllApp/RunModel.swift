@@ -250,7 +250,9 @@ final class RunModel: ObservableObject {
         do {
             let firstDiscovery = displays.isEmpty && !displayPreset
             displays = try await Argyll.displays()
-            instruments = try await Argyll.instruments()
+            // Argyll lists every serial port as a possible instrument; on a Mac those are
+            // Bluetooth and audio devices, never a colour instrument. USB/HID entries only.
+            instruments = try await Argyll.instruments().filter { !$0.name.hasPrefix("/dev/") }
             discoveryError = nil
             // First time through, prefer an external display: that is what people profile.
             if firstDiscovery || !displays.contains(where: { $0.index == displayIndex }) {
