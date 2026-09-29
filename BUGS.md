@@ -73,3 +73,12 @@ Fix: recognise the device-selector regex in both `classify` (line path) and the 
 path. Also: Cancel now terminates ccxxmake (its menu ignores Escape), and ccxxmake is
 bundled with the app.
 Test: `ArgyllOutputParserTests.testDeviceSelectPromptAcrossChunkSplits`.
+
+## 7. Quitting the app left a measurement running headless — fixed 2026-09-29
+
+Argyll tools are spawned in their own session (SETSID) so the pty is their terminal,
+which also means they outlive the app: relaunching it mid-run left `dispread` measuring
+with nothing listening, and the instrument locked.
+
+Fix: `applicationWillTerminate` kills the running profiling or correction tool.
+Test: manual (relaunch during a run, confirm no orphaned Helpers process).

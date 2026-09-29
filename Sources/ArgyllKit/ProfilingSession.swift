@@ -87,6 +87,8 @@ public actor ProfilingSession {
     }
 
     public func answerPrompt() { current?.answerPrompt() }
+    /// Terminate the running tool immediately (app quitting).
+    public func kill() { current?.kill() }
     /// Escape lets the tool clean up (restore the display, close its window); if it is
     /// still running two seconds later it is terminated.
     public func abort() {

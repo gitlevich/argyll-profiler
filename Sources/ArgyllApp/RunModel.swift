@@ -158,6 +158,20 @@ final class RunModel: ObservableObject {
         Task { await correction?.abort() }
     }
 
+    /// Argyll tools run in their own session and would outlive the app. Called from the
+    /// app's termination hook so quitting never leaves a measurement running headless.
+    func terminateChildren() {
+        let session = self.session
+        let correction = self.correction
+        let semaphore = DispatchSemaphore(value: 0)
+        Task.detached {
+            await session?.kill()
+            await correction?.abort()
+            semaphore.signal()
+        }
+        _ = semaphore.wait(timeout: .now() + 2)
+    }
+
     // Compare
     @Published var compareProfiles: [InstalledProfile] = []
     @Published var compareA: URL?
