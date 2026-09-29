@@ -462,6 +462,11 @@ final class RunModel: ObservableObject {
         if let id = selectedDisplayCGID() {
             previousProfileURL = DisplayProfiles.currentProfileURL(for: id)
             note("PREVIOUS \(previousProfileURL?.lastPathComponent ?? "none")")
+            // Measure the display through Apple's own profile, not through an earlier
+            // correction. Installing assigns the new profile afterwards; a test run
+            // without installing puts the previous one back.
+            DisplayProfiles.setProfile(nil, for: id)
+            note("ASSIGNED factory profile for the run")
         }
 
         let directory = Self.runsDirectory().appendingPathComponent(profileName, isDirectory: true)
@@ -668,13 +673,22 @@ final class RunModel: ObservableObject {
     private func finish(_ url: URL) {
         pending.profileURL = url
         summary = pending
+        if !pending.installed { restorePreviousProfile() }
         phase = .finished
         note("PHASE finished \(url.path)")
     }
 
     private func fail(_ message: String) {
+        if phase == .running { restorePreviousProfile() }
         phase = .failed(message)
         note("PHASE failed \(message)")
+    }
+
+    private func restorePreviousProfile() {
+        guard let id = selectedDisplayCGID() else { return }
+        let factory = DisplayProfiles.factoryProfile(for: id)?.url
+        DisplayProfiles.setProfile(previousProfileURL == factory ? nil : previousProfileURL, for: id)
+        note("RESTORED \(previousProfileURL?.lastPathComponent ?? "factory")")
     }
 
     /// Test hook: when a prompt is showing and `--control PATH` was given, the appearance

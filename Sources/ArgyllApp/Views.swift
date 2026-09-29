@@ -123,8 +123,8 @@ struct SetupView: View {
                     }
                     .pickerStyle(.segmented)
                     Text(model.calibrate
-                         ? "Calibrate changes the display: Argyll builds correction curves that bend every pixel toward the white point and gamma below, then measures the result. Use it only for a display that has no preset of its own for the white you want."
-                         : "Profile only leaves the display exactly as it is and measures it. The profile tells colour-managed apps how this panel behaves so they can show images correctly. Right choice when the display already has the white point you want, e.g. an Apple preset.")
+                         ? "Calibrate changes the display: Argyll works out an adjustment that pushes it toward the white point and gamma below, then measures the result. Use it only for a display that has no Preset of its own for the white you want."
+                         : "Profile only leaves the display exactly as it is and measures it. The profile tells colour-managed apps like Lightroom how this panel behaves so they show images correctly. Right choice when the display already has the white point you want, e.g. from its Apple Preset.")
                         .font(.caption)
                         .foregroundStyle(.secondary)
                         .fixedSize(horizontal: false, vertical: true)
@@ -195,8 +195,8 @@ struct SetupView: View {
 
     private var footnote: String {
         model.calibrate
-            ? "On this macOS the curves may not survive a display reconnect."
-            : "Before starting, set the display to its Apple factory profile so no old curves are measured."
+            ? "Calibration adjustments may not survive a display reconnect on this macOS."
+            : "Keep the display on the Preset you use every day (System Settings > Displays). The app measures through Apple's own profile and installs the new one when done."
     }
 }
 
