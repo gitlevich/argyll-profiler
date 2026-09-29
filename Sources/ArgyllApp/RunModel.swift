@@ -400,6 +400,29 @@ final class RunModel: ObservableObject {
         return compareProfiles.first { $0.url == url }?.name ?? url.deletingPathExtension().lastPathComponent
     }
 
+    func compactLabel(for url: URL?) -> String {
+        guard let url else { return "—" }
+        guard let p = compareProfiles.first(where: { $0.url == url }) else { return url.deletingPathExtension().lastPathComponent }
+        return Self.compactLabel(p)
+    }
+
+    /// Menu-sized label: screen · instrument · date. Built from the description this app
+    /// writes ("Screen, Instrument kind, Date (details)") and from the two earlier formats
+    /// (" - " and " ? " separators); anything else shows as it is.
+    static func compactLabel(_ p: InstalledProfile) -> String {
+        if p.isFactory { return "\(p.name) (Apple factory)" }
+        var s = p.name
+        if let paren = s.range(of: " (") { s = String(s[..<paren.lowerBound]) }
+        let separator = [" - ", " ? ", " · ", ", "].first { s.contains($0) }
+        guard let separator else { return p.name }
+        var parts = s.components(separatedBy: separator).map { $0.trimmingCharacters(in: .whitespaces) }
+        parts = parts.filter { !$0.hasPrefix("Argyll Profiler") && !$0.contains("patches") && !$0.hasPrefix("profile only") && !$0.hasPrefix("calibrated") }
+        parts = parts.map { $0.replacingOccurrences(of: "i1 DisplayPro, ColorMunki Display", with: "i1 DisplayPro") }
+        parts = parts.map { $0.replacingOccurrences(of: " colorimeter", with: "").replacingOccurrences(of: " spectrophotometer", with: "") }
+        if separator == ", " && parts.count > 3 { parts = Array(parts.prefix(3)) }   // date may hold no comma; details already cut
+        return parts.isEmpty ? p.name : parts.prefix(3).joined(separator: " · ")
+    }
+
     func chooseReferenceImage() {
         let panel = NSOpenPanel()
         panel.allowedContentTypes = [.image]

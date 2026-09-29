@@ -96,6 +96,20 @@ final class RunModelTests: XCTestCase {
         XCTAssertEqual(model.instrumentLabel(hl), "Colorimeter: i1 DisplayPro family")
     }
 
+    func testCompactLabelsFitAMenu() {
+        func label(_ name: String, factory: Bool = false) -> String {
+            RunModel.compactLabel(InstalledProfile(url: URL(fileURLWithPath: "/tmp/x.icc"), name: name, isFactory: factory))
+        }
+        XCTAssertEqual(label("Studio Display, Calibrite Display Plus HL colorimeter, 2026-09-28 19:09 (Argyll Profiler 0.2, profile only, 175 patches)"),
+                       "Studio Display · Calibrite Display Plus HL · 2026-09-28 19:09")
+        XCTAssertEqual(label("Studio Display - i1 DisplayPro family colorimeter - Argyll Profiler 0.2 - 2026-09-28 19:09 - profile only, 175 patches"),
+                       "Studio Display · i1 DisplayPro family · 2026-09-28 19:09")
+        XCTAssertEqual(label("Studio Display ? i1 DisplayPro, ColorMunki Display ? Argyll Profiler 0.2 ? 2026-09-28 19:09 ? profile only, 175 patches"),
+                       "Studio Display · i1 DisplayPro · 2026-09-28 19:09")
+        XCTAssertEqual(label("StudioDisplay_01-12-2025.icc"), "StudioDisplay_01-12-2025.icc")
+        XCTAssertEqual(label("Studio Display", factory: true), "Studio Display (Apple factory)")
+    }
+
     func testFailedRunStillDrainsEvents() async throws {
         let model = RunModel()
         var continuation: AsyncStream<(ProfilingSession.Stage, ArgyllEvent)>.Continuation!

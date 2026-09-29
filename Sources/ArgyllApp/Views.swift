@@ -483,10 +483,11 @@ struct CompareView: View {
     private func slot(_ label: String, selection: Binding<URL?>) -> some View {
         Picker(label, selection: selection) {
             ForEach(model.compareProfiles) { p in
-                Text(p.isFactory ? "\(p.name) (Apple factory)" : p.name)
+                Text(RunModel.compactLabel(p))
                     .tag(Optional(p.url))
             }
         }
+        .help(model.profileName(for: selection.wrappedValue))
     }
 
     private func sideButton(_ label: String, url: URL?) -> some View {
@@ -505,7 +506,7 @@ struct CompareView: View {
             .controlSize(.large)
             .tint(active ? Color.accentColor : Color.secondary)
             .keyboardShortcut(KeyEquivalent(Character(label.lowercased())), modifiers: [])
-            Text(url?.deletingPathExtension().lastPathComponent ?? "—")
+            Text(model.compactLabel(for: url))
                 .font(.caption)
                 .foregroundStyle(active ? .primary : .secondary)
                 .lineLimit(1)
