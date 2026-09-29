@@ -82,3 +82,18 @@ with nothing listening, and the instrument locked.
 
 Fix: `applicationWillTerminate` kills the running profiling or correction tool.
 Test: manual (relaunch during a run, confirm no orphaned Helpers process).
+
+## 8. Whole built-in display turned cyan after a colorimeter run — fixed 2026-09-29
+
+The app remembered the colorimeter from the previous run; profiling the MacBook's
+mini-LED display with the HL and no correction matrix for that panel measured its white
+as x 0.381, y 0.323 (~3900 K) instead of D65. The profile therefore described an orange
+display, and, because macOS honours the assigned profile on the built-in display for
+everything it draws, the whole screen went cyan.
+
+Fix: (1) a sanity check before installing — a measured white more than 0.03 xy from D65
+keeps the profile in the run folder but does not assign it, and the results screen says
+why; (2) Start asks for confirmation when a colorimeter is used on a display it has no
+matrix for. Also learned: the built-in display, unlike the Studio Display, applies the
+assigned profile system-wide.
+Test: `ProfilingSanityTests.testMeasuredWhiteIsReadFromTi3`.

@@ -27,6 +27,7 @@ struct RootView: View {
 struct SetupView: View {
     @EnvironmentObject var model: RunModel
     @State private var nicknameDraft = ""
+    @State private var confirmUncorrected = false
 
     var body: some View {
         VStack(spacing: 0) {
@@ -185,11 +186,23 @@ struct SetupView: View {
                         .lineLimit(2)
                 }
                 Spacer()
-                Button("Start") { model.start() }
+                Button("Start") {
+                    if model.selectedInstrument.map({ RunModel.instrumentKind($0.name) }) == .colorimeter, model.correctionFile == nil {
+                        confirmUncorrected = true
+                    } else {
+                        model.start()
+                    }
+                }
                     .buttonStyle(.borderedProminent)
                     .controlSize(.large)
                     .keyboardShortcut(.defaultAction)
                     .disabled(model.instruments.isEmpty || model.displays.isEmpty || model.profileName.isEmpty)
+                    .confirmationDialog("No correction matrix for \(model.selectedInstrumentName) on \(model.selectedDisplayName)", isPresented: $confirmUncorrected, titleVisibility: .visible) {
+                        Button("Profile anyway") { model.start() }
+                        Button("Cancel", role: .cancel) {}
+                    } message: {
+                        Text("A colorimeter reads a display accurately only through a correction for that panel's backlight. Without one the white point can be hundreds of kelvin off. Make a matrix with the spectrophotometer first, or profile with the spectrophotometer.")
+                    }
             }
             .padding()
         }
@@ -393,11 +406,23 @@ struct ResultsView: View {
 
     var body: some View {
         VStack(spacing: 22) {
-            Image(systemName: "checkmark.seal.fill")
-                .font(.system(size: 48, weight: .light))
-                .foregroundStyle(.green)
-            Text(model.summary?.installed == true ? "Profile installed and active" : "Profile built")
-                .font(.title2.weight(.semibold))
+            if let w = model.summary?.implausibleWhite {
+                Image(systemName: "exclamationmark.triangle.fill")
+                    .font(.system(size: 48, weight: .light))
+                    .foregroundStyle(.orange)
+                Text("Profile built but not installed")
+                    .font(.title2.weight(.semibold))
+                Text(String(format: "The display's white measured x %.3f, y %.3f, far from the D65 every Apple preset uses. That usually means the instrument was not on the patch window, or a colorimeter was used on a display it has no correction matrix for. The profile is kept in the run folder; the display keeps its previous profile.", w.x, w.y))
+                    .foregroundStyle(.secondary)
+                    .multilineTextAlignment(.center)
+                    .frame(maxWidth: 480)
+            } else {
+                Image(systemName: "checkmark.seal.fill")
+                    .font(.system(size: 48, weight: .light))
+                    .foregroundStyle(.green)
+                Text(model.summary?.installed == true ? "Profile installed and active" : "Profile built")
+                    .font(.title2.weight(.semibold))
+            }
 
             if let s = model.summary {
                 Grid(alignment: .leading, horizontalSpacing: 24, verticalSpacing: 8) {

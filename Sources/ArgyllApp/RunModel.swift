@@ -15,6 +15,8 @@ final class RunModel: ObservableObject {
     struct Summary {
         var profileURL: URL
         var installed: Bool
+        /// Set when installation was refused because the measured white is implausible.
+        var implausibleWhite: (x: Double, y: Double)?
         var luminance: Double?
         var whiteXYZ: [Double]?
         var avgError: Double?
@@ -476,8 +478,12 @@ final class RunModel: ObservableObject {
         attach(stages: [.targen] + (calibrate ? [.dispcal] : []) + [.dispread, .colprof] + (installProfile ? [.dispwin] : []),
                profileURL: directory.appendingPathComponent("\(profileName).icc"),
                installed: installProfile,
-               events: session.events) {
-            try await session.run()
+               events: session.events) { [weak self] in
+            let url = try await session.run()
+            if let white = await session.skippedInstall {
+                await MainActor.run { self?.pending.installed = false; self?.pending.implausibleWhite = white }
+            }
+            return url
         }
     }
 
@@ -674,6 +680,7 @@ final class RunModel: ObservableObject {
         pending.profileURL = url
         summary = pending
         if !pending.installed { restorePreviousProfile() }
+        if let w = pending.implausibleWhite { note("NOT INSTALLED: white x \(w.x) y \(w.y)") }
         phase = .finished
         note("PHASE finished \(url.path)")
     }

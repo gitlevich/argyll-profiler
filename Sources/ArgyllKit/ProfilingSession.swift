@@ -48,6 +48,11 @@ public struct ProfilingOptions: Sendable {
     /// false leaves the finished .icc in the working directory without installing or
     /// assigning it (dispwin -I). Useful for test runs and for validation-only passes.
     public var installProfile: Bool = true
+    /// Sanity check before installing: if the measured white is further than this (in
+    /// CIE xy) from D65, the profile is built but not installed. A colorimeter without a
+    /// matrix, or an instrument that slid off the patch window, produces whites hundreds
+    /// of kelvin off; installing that turns the whole screen a colour. nil disables it.
+    public var maxWhiteDeviationFromD65: Double? = 0.03
     /// Provenance written into the ICC file. The description is what System Settings
     /// shows in the Color profile menu; defaults to the profile name.
     public var profileDescription: String? = nil
@@ -85,6 +90,9 @@ public actor ProfilingSession {
     public enum Failure: Error {
         case stageFailed(Stage, code: Int32, lastError: String?)
     }
+
+    /// Set when the profile was built but not installed because its white failed the sanity check.
+    public private(set) var skippedInstall: (x: Double, y: Double)?
 
     public nonisolated let events: AsyncStream<(Stage, ArgyllEvent)>
     public let directory: URL
@@ -154,12 +162,35 @@ public actor ProfilingSession {
         if let model = options.deviceModel { profArgs += ["-M", model] }
         try await step(.colprof, profArgs + [base])
 
-        // -I installs into ~/Library/ColorSync/Profiles and assigns it to the display.
+        // -I installs into ~/Library/ColorSync/Profiles and assigns it to the display,
+        // unless the measured white is implausible for a display (see maxWhiteDeviationFromD65).
         if options.installProfile {
-            try await step(.dispwin, [display, "-I", "\(base).icc"])
+            if let limit = options.maxWhiteDeviationFromD65,
+               let white = Self.measuredWhite(in: directory.appendingPathComponent("\(base).ti3")),
+               hypot(white.x - 0.3127, white.y - 0.3290) > limit {
+                skippedInstall = white
+            } else {
+                try await step(.dispwin, [display, "-I", "\(base).icc"])
+            }
         }
 
         return directory.appendingPathComponent("\(base).icc")
+    }
+
+    /// Chromaticity of the RGB=100,100,100 patch in a .ti3 (fields: SAMPLE_ID RGB_R RGB_G RGB_B XYZ_X XYZ_Y XYZ_Z …).
+    static func measuredWhite(in ti3: URL) -> (x: Double, y: Double)? {
+        guard let text = try? String(contentsOf: ti3, encoding: .utf8) else { return nil }
+        var inData = false
+        for line in text.split(separator: "\n") {
+            if line.hasPrefix("BEGIN_DATA") { inData = true; continue }
+            if line.hasPrefix("END_DATA") { break }
+            guard inData else { continue }
+            let f = line.split(separator: " ").compactMap { Double($0) }
+            guard f.count >= 7, f[1] == 100, f[2] == 100, f[3] == 100 else { continue }
+            let sum = f[4] + f[5] + f[6]
+            return sum > 0 ? (f[4] / sum, f[5] / sum) : nil
+        }
+        return nil
     }
 
     private func step(_ stage: Stage, _ arguments: [String]) async throws {

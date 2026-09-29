@@ -144,3 +144,29 @@ final class ArgyllOutputParserTests: XCTestCase {
         XCTAssertTrue(text.contains("hit any key to retry"))
     }
 }
+
+
+final class ProfilingSanityTests: XCTestCase {
+    /// BUGS.md #8: the white the HL measured on the MacBook without a matrix, x 0.381 y 0.323,
+    /// must be recognised as implausible; a real D65 panel must pass.
+    func testMeasuredWhiteIsReadFromTi3() throws {
+        let ti3 = """
+        CTI3
+        BEGIN_DATA_FORMAT
+        SAMPLE_ID RGB_R RGB_G RGB_B XYZ_X XYZ_Y XYZ_Z
+        END_DATA_FORMAT
+        NUMBER_OF_SETS 2
+        BEGIN_DATA
+        1 100.0000 100.0000 100.0000 118.0641 100.0000 91.84116
+        2 0.0000 0.0000 0.0000 0.1 0.1 0.2
+        END_DATA
+        """
+        let url = FileManager.default.temporaryDirectory.appendingPathComponent("sanity-\(UUID()).ti3")
+        try ti3.write(to: url, atomically: true, encoding: .utf8)
+        let w = try XCTUnwrap(ProfilingSession.measuredWhite(in: url))
+        XCTAssertEqual(w.x, 0.381, accuracy: 0.001)
+        XCTAssertEqual(w.y, 0.323, accuracy: 0.001)
+        XCTAssertGreaterThan(hypot(w.x - 0.3127, w.y - 0.3290), 0.03, "must trip the sanity check")
+        XCTAssertLessThan(hypot(0.3136 - 0.3127, 0.3293 - 0.3290), 0.03, "a real D65 reading must pass")
+    }
+}
