@@ -497,7 +497,7 @@ struct CompareView: View {
 
             // One row: A + menu, switch, B + menu. The active letter is highlighted.
             HStack(spacing: 12) {
-                profilePicker("A", selection: $model.compareA, url: model.compareA)
+                profilePicker("A", selection: $model.compareA, side: .a)
                 Button {
                     model.toggleCompare()
                 } label: {
@@ -508,11 +508,11 @@ struct CompareView: View {
                 .buttonStyle(.bordered)
                 .keyboardShortcut(.space, modifiers: [])
                 .help("Switch the shown profile (space)")
-                profilePicker("B", selection: $model.compareB, url: model.compareB)
+                profilePicker("B", selection: $model.compareB, side: .b)
             }
-            Text("Showing \(model.activeProfile == model.compareA ? "A" : (model.activeProfile == model.compareB ? "B" : "neither"))")
+            Text(model.sidesAreSameProfile ? "A and B are the same profile; pick a different one on either side." : "Showing \(model.activeSide.rawValue)")
                 .font(.callout.weight(.medium))
-                .foregroundStyle(.secondary)
+                .foregroundStyle(model.sidesAreSameProfile ? .orange : .secondary)
 
             ZStack {
                 if let image = model.renderedImage ?? model.referenceImage {
@@ -560,11 +560,11 @@ struct CompareView: View {
     }
 
     /// Letter badge (highlighted when that profile is showing; tap to show it) plus its menu.
-    private func profilePicker(_ label: String, selection: Binding<URL?>, url: URL?) -> some View {
-        let active = model.activeProfile == url
+    private func profilePicker(_ label: String, selection: Binding<URL?>, side: RunModel.CompareSide) -> some View {
+        let active = model.activeSide == side
         return HStack(spacing: 8) {
             Button {
-                model.activate(url)
+                model.show(side)
             } label: {
                 Text(label)
                     .font(.headline)

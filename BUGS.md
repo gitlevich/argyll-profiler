@@ -108,3 +108,13 @@ ideal size, so switching Setup ↔ Compare resized it.
 Fix: CorrectionOptions carries the flag (-N) and exposes its argument list;
 `.contentMinSize` keeps the user's window size.
 Test: `RunModelTests.testCorrectionPassesReuseCalibrationFlag`.
+
+## 10. Compare stopped switching; both A and B highlighted — fixed 2026-09-29
+
+The live side was inferred by comparing file URLs, so when A and B held the same profile
+both badges lit and the switch had nothing to change; that state was easy to reach by
+picking profiles in the menus.
+
+Fix: the live side is explicit state (`activeSide`); the badge and the switch use it, and
+the caption warns when A and B are the same file. Verified by screenshots: switching
+changes 98% of the rendered chart pixels between Apple's profile and a measured one.

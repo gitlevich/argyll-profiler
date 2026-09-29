@@ -185,9 +185,13 @@ final class RunModel: ObservableObject {
 
     // Compare
     @Published var compareProfiles: [InstalledProfile] = []
+    enum CompareSide: String { case a = "A", b = "B" }
+    /// Which side is showing. Tracked explicitly: A and B may hold the same profile.
+    @Published var activeSide: CompareSide = .a
     /// Changing the menu of the side that is showing re-renders through the new choice at once.
-    @Published var compareA: URL? { didSet { if oldValue != nil, activeProfile == oldValue, compareA != oldValue { activate(compareA) } } }
-    @Published var compareB: URL? { didSet { if oldValue != nil, activeProfile == oldValue, compareB != oldValue { activate(compareB) } } }
+    @Published var compareA: URL? { didSet { if oldValue != nil, activeSide == .a, compareA != oldValue { show(.a) } } }
+    @Published var compareB: URL? { didSet { if oldValue != nil, activeSide == .b, compareB != oldValue { show(.b) } } }
+    var sidesAreSameProfile: Bool { compareA != nil && compareA == compareB }
     @Published var activeProfile: URL?
     @Published var referenceImage: NSImage? { didSet { rerender() } }
     /// `referenceImage` converted through `activeProfile`, the image actually shown.
@@ -567,7 +571,7 @@ final class RunModel: ObservableObject {
         compareB = previousProfileURL ?? compareProfiles.first { $0.url != compareA }?.url ?? factory
         if referenceImage == nil { referenceImage = TestImage.make() } else { rerender() }
         // Always start by showing A.
-        if activeProfile != compareA { activate(compareA) }
+        show(.a)
         phase = .compare
         note("COMPARE active=\(activeProfile?.lastPathComponent ?? "factory") A=\(compareA?.lastPathComponent ?? "-") B=\(compareB?.lastPathComponent ?? "-")")
     }
@@ -590,8 +594,13 @@ final class RunModel: ObservableObject {
         renderedImage = ProfileRenderer.render(image, through: activeProfile)
     }
 
+    func show(_ side: CompareSide) {
+        activeSide = side
+        activate(side == .a ? compareA : compareB)
+    }
+
     func toggleCompare() {
-        activate(activeProfile == compareA ? compareB : compareA)
+        show(activeSide == .a ? .b : .a)
     }
 
     func profileName(for url: URL?) -> String {
