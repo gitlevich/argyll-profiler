@@ -39,8 +39,11 @@ struct ArgyllOutputParser {
     private static let error     = try! Regex("Error - (.*)$")
     private static let tile      = try! Regex("(white|calibration) (reference|tile)").ignoresCase()
     private static let display   = try! Regex("place (the )?instrument on (the )?(test window|display|screen|spot)").ignoresCase()
-    private static let keyPhrase = try! Regex("hit (any|a|esc)|any other key|press (any|a) key").ignoresCase()
+    private static let keyPhrase = try! Regex("hit (any|a|esc)|any other key|press (any|a) key|select device").ignoresCase()
     private static let promptEnd = try! Regex(":\\s*$")
+    /// ccxxmake and dispcal's adjustment mode print a numbered menu ("Press 1 .. 4:") as a
+    /// complete line, then the options, then block. That line is the prompt.
+    private static let menu = try! Regex("^\\s*Press \\d+ \\.\\. \\d+:")
 
     mutating func feed(_ chunk: Data) -> [ArgyllEvent] {
         pending.append(chunk)
@@ -88,6 +91,9 @@ struct ArgyllOutputParser {
         }
         if let m = line.firstMatch(of: Self.error) {
             events.append(.error(String(m[1].substring ?? "")))
+        }
+        if line.contains(Self.menu) {
+            events.append(.prompt(.other(line.trimmingCharacters(in: .whitespaces))))
         }
         return events
     }

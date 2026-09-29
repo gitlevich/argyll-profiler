@@ -107,6 +107,18 @@ final class ArgyllOutputParserTests: XCTestCase {
         XCTAssertTrue(prompts(e).isEmpty)
     }
 
+    func testMenuAndDeviceSelectionArePrompts() {
+        // ccxxmake prints its menu as complete lines, then blocks; the device list ends in an unterminated prompt.
+        let menu = "\nPress 1 .. 4:\n1) Select an instrument, Currently 1 ( 'hid1: (X-Rite i1 DisplayPro, ColorMunki Display)')\n2) Measure test patches with current instrument\n3) [ Compute Colorimeter Correction Matrix & save it ]\n4) Exit\n"
+        let select = "'1'\n    1 = 'hid1: (X-Rite i1 DisplayPro, ColorMunki Display)'\n    2 = 'usb17: (X-Rite i1 Pro 2)'\nSelect device 1 - 2: "
+        let e = events(from: [menu, select], chunkSize: 7)
+        let p = prompts(e)
+        XCTAssertEqual(p.count, 2, "\(p)")
+        guard case .other(let m)? = p.first, case .other(let d)? = p.last else { return XCTFail("\(p)") }
+        XCTAssertTrue(m.hasPrefix("Press 1 .. 4:"), m)
+        XCTAssertTrue(d.contains("Select device 1 - 2:"), d)
+    }
+
     func testErrorLine() {
         let e = events(from: ["dispread: Error - Instrument Access Failed\n"], chunkSize: 4096)
         let errors = e.compactMap { if case .error(let m) = $0 { return m } else { return nil } }

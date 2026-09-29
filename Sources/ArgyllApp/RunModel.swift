@@ -6,7 +6,7 @@ import ArgyllKit
 @MainActor
 final class RunModel: ObservableObject {
     enum Phase: Equatable {
-        case setup, running, finished, compare
+        case setup, running, finished, compare, correcting, corrected
         case failed(String)
     }
 
@@ -69,6 +69,94 @@ final class RunModel: ObservableObject {
     @Published var progress: (done: Int, total: Int)?
     @Published var log: [String] = []
     @Published var summary: Summary?
+
+    // Correction matrix
+    @Published var displayTechnology = store.string(forKey: "displayTechnology") ?? "u" { didSet { Self.store.set(displayTechnology, forKey: "displayTechnology") } }
+    @Published var correctionStep: CorrectionSession.Step?
+    @Published var correctionStarted = false
+    @Published var correctionResult: CorrectionSession.Result?
+    private var correction: CorrectionSession?
+
+    static let displayTechnologies: [(code: String, name: String)] = [
+        ("u", "Unknown / other"),
+        ("s", "LCD, PFS phosphor, IPS (Apple Studio Display, iMac, MacBook Pro)"),
+        ("r", "LCD, PFS phosphor"),
+        ("e", "LCD, white LED"),
+        ("h", "LCD, RG phosphor"),
+        ("b", "LCD, RGB LED"),
+        ("o", "OLED"),
+        ("w", "WOLED"),
+    ]
+
+    var spectrometer: Argyll.Instrument? { instruments.first { Self.instrumentKind($0.name) == .spectrophotometer } }
+    var canMakeCorrection: Bool {
+        selectedInstrument.map { Self.instrumentKind($0.name) == .colorimeter } == true && spectrometer != nil
+    }
+    var spectrometerName: String {
+        spectrometer.map { nickname(for: $0) ?? Self.instrumentName($0.name) } ?? "spectrophotometer"
+    }
+
+    /// Which instrument the current prompt is about.
+    var promptInstrumentName: String {
+        if phase == .correcting, correctionStep == .spectrometer { return spectrometerName }
+        return selectedInstrumentName
+    }
+
+    func openCorrection() {
+        correctionStarted = false
+        correctionResult = nil
+        correctionStep = nil
+        prompt = nil
+        progress = nil
+        log = []
+        phase = .correcting
+    }
+
+    func startCorrection() {
+        guard let colorimeter = selectedInstrument, let spectro = spectrometer else { return }
+        let f = DateFormatter(); f.dateFormat = "yyyy-MM-dd"
+        let url = Self.correctionsDirectory()
+            .appendingPathComponent("\(Self.token(selectedDisplayName))_\(Self.token(selectedInstrumentName)).ccmx")
+        var options = CorrectionOptions(displayIndex: displayIndex, colorimeterPort: colorimeter.port, spectrometerPort: spectro.port,
+                                        displayName: selectedDisplayName,
+                                        descriptor: "\(selectedInstrumentName) on \(selectedDisplayName), \(spectrometerName) reference, \(f.string(from: Date()))",
+                                        outputURL: url)
+        options.displayTechnology = displayTechnology
+        let session = CorrectionSession(options: options)
+        correction = session
+        correctionStarted = true
+        note("CORRECTION start colorimeter=\(colorimeter.port) spectrometer=\(spectro.port) tech=\(displayTechnology)")
+
+        let consumer = Task { [weak self] in
+            for await event in session.events { self?.handleCorrection(event) }
+        }
+        Task { [weak self] in
+            do {
+                let result = try await session.run()
+                await consumer.value
+                self?.correctionResult = result
+                self?.phase = .corrected
+                self?.note("CORRECTION done avg=\(result.fitAverage ?? -1) max=\(result.fitMax ?? -1)")
+            } catch {
+                await consumer.value
+                self?.fail("\(error)")
+            }
+        }
+    }
+
+    private func handleCorrection(_ event: CorrectionSession.Event) {
+        switch event {
+        case .line(let line): append("[ccxxmake] \(line)")
+        case .step(let step): correctionStep = step; progress = nil; note("CORRECTION step \(step.rawValue)")
+        case .progress(let done, let total): progress = (done, total)
+        case .prompt(let p): prompt = p; note("PROMPT \(p)"); watchControlFile()
+        case .exited(let code): note("EXIT ccxxmake \(code)")
+        }
+    }
+
+    func cancelCorrection() {
+        Task { await correction?.abort() }
+    }
 
     // Compare
     @Published var compareProfiles: [InstalledProfile] = []
@@ -402,10 +490,13 @@ final class RunModel: ObservableObject {
     }
 
     func continueAfterPrompt() {
-        guard let session else { return }
         prompt = nil
         note("ANSWERED")
-        Task { await session.answerPrompt() }
+        if phase == .correcting, let correction {
+            Task { await correction.answerPrompt() }
+        } else if let session {
+            Task { await session.answerPrompt() }
+        }
     }
 
     func cancel() {
@@ -416,6 +507,7 @@ final class RunModel: ObservableObject {
 
     func reset() {
         session = nil
+        correction = nil
         phase = .setup
         prompt = nil
         progress = nil

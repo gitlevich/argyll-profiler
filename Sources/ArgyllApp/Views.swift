@@ -12,6 +12,8 @@ struct RootView: View {
             case .running: RunView()
             case .finished: ResultsView()
             case .compare: CompareView()
+            case .correcting: CorrectionView()
+            case .corrected: CorrectionDoneView()
             case .failed(let message): FailedView(message: message)
             }
         }
@@ -58,12 +60,22 @@ struct SetupView: View {
                         .font(.callout)
                     }
                     if model.selectedInstrument.map({ RunModel.instrumentKind($0.name) }) == .colorimeter {
-                        if let correction = model.correctionDescription {
-                            Label("Correction matrix: \(correction)", systemImage: "checkmark.seal")
-                                .font(.caption).foregroundStyle(.secondary)
-                        } else {
-                            Label("No correction matrix for this colorimeter on this display; Argyll's generic calibration will be used. Saturated colours may be off.", systemImage: "exclamationmark.triangle")
-                                .font(.caption).foregroundStyle(.secondary)
+                        HStack(alignment: .firstTextBaseline) {
+                            if let correction = model.correctionDescription {
+                                Label("Correction matrix: \(correction)", systemImage: "checkmark.seal")
+                                    .font(.caption).foregroundStyle(.secondary)
+                            } else {
+                                Label("No correction matrix for this colorimeter on this display; Argyll's generic calibration will be used. Saturated colours may be off.", systemImage: "exclamationmark.triangle")
+                                    .font(.caption).foregroundStyle(.secondary)
+                            }
+                            Spacer()
+                            if model.canMakeCorrection {
+                                Button(model.correctionDescription == nil ? "Make matrix…" : "Remake matrix…") { model.openCorrection() }
+                                    .controlSize(.small)
+                            } else {
+                                Text("Connect a spectrophotometer to make one.")
+                                    .font(.caption2).foregroundStyle(.tertiary)
+                            }
                         }
                     }
                     HStack {
@@ -329,9 +341,9 @@ struct PromptCard: View {
     private var instructions: String {
         switch prompt {
         case .placeOnWhiteTile:
-            return "Put the \(model.selectedInstrumentName) on its white reference tile, then press Continue."
+            return "Put the \(model.promptInstrumentName) on its white reference tile, then press Continue."
         case .placeOnDisplay:
-            return "A patch window is open on \(model.selectedDisplayName). Put the \(model.selectedInstrumentName) flat against it, then press Continue."
+            return "A patch window is open on \(model.selectedDisplayName). Put the \(model.promptInstrumentName) flat against it, then press Continue."
         case .other(let text):
             return text
         }
@@ -590,6 +602,107 @@ struct NumbersView: View {
         guard let url, let w = ProfileInspector.whitePoint(of: url) else { return "—" }
         if w.isD50 { return "D50 (v4 profile, adapted)" }
         return String(format: "x %.4f  y %.4f  ≈ %.0f K", w.x, w.y, w.cct)
+    }
+}
+
+// MARK: - Correction matrix
+
+struct CorrectionView: View {
+    @EnvironmentObject var model: RunModel
+    @State private var showLog = false
+
+    var body: some View {
+        VStack(spacing: 20) {
+            Text("Correction matrix for \(model.selectedInstrumentName) on \(model.selectedDisplayName)")
+                .font(.title3.weight(.semibold))
+
+            if !model.correctionStarted {
+                Text("A colorimeter reads a display accurately only through a correction for that panel's backlight. The \(model.spectrometerName) measures four patches as the reference, the \(model.selectedInstrumentName) measures the same four, and Argyll computes a matrix that makes the colorimeter agree with the spectrophotometer on this display. From then on every run with the colorimeter uses it automatically.")
+                    .foregroundStyle(.secondary)
+                    .frame(maxWidth: 520)
+                Form {
+                    Picker("Backlight type", selection: $model.displayTechnology) {
+                        ForEach(RunModel.displayTechnologies, id: \.code) { t in
+                            Text(t.name).tag(t.code)
+                        }
+                    }
+                }
+                .formStyle(.grouped)
+                .frame(maxWidth: 520, maxHeight: 90)
+                Text("Put the \(model.selectedInstrumentName) on the display first; you will be asked to swap in the \(model.spectrometerName) halfway.")
+                    .font(.caption).foregroundStyle(.secondary)
+                HStack {
+                    Button("Back") { model.reset() }
+                    Button("Start") { model.startCorrection() }
+                        .buttonStyle(.borderedProminent)
+                        .keyboardShortcut(.defaultAction)
+                }
+            } else {
+                HStack(spacing: 18) {
+                    stage("Colorimeter", .colorimeter)
+                    stage("Spectrophotometer", .spectrometer)
+                    stage("Compute", .computing)
+                }
+                Spacer(minLength: 0)
+                if let prompt = model.prompt {
+                    PromptCard(prompt: prompt)
+                } else {
+                    VStack(spacing: 14) {
+                        if let p = model.progress {
+                            ProgressView(value: Double(p.done), total: Double(p.total))
+                            Text("Measuring patch \(p.done) of \(p.total) with the \(model.promptInstrumentName)").font(.title3)
+                        } else {
+                            ProgressView()
+                            Text(model.correctionStep == .computing ? "Computing the matrix…" : "Setting up…").font(.title3)
+                        }
+                    }
+                    .frame(maxWidth: 380)
+                }
+                Spacer(minLength: 0)
+                DisclosureGroup("Log", isExpanded: $showLog) { LogView() }
+                HStack { Spacer(); Button("Cancel", role: .cancel) { model.cancelCorrection() } }
+            }
+        }
+        .padding(24)
+    }
+
+    private func stage(_ label: String, _ step: CorrectionSession.Step) -> some View {
+        let order: [CorrectionSession.Step] = [.colorimeter, .spectrometer, .computing]
+        let current = model.correctionStep.flatMap { order.firstIndex(of: $0) } ?? -1
+        let mine = order.firstIndex(of: step)!
+        let symbol = mine < current ? "checkmark.circle.fill" : (mine == current ? "circle.dotted" : "circle")
+        let color: Color = mine < current ? .green : (mine == current ? .accentColor : .secondary)
+        return HStack(spacing: 6) {
+            Image(systemName: symbol).foregroundStyle(color)
+            Text(label).font(.callout).foregroundStyle(mine <= current ? .primary : .secondary)
+        }
+    }
+}
+
+struct CorrectionDoneView: View {
+    @EnvironmentObject var model: RunModel
+
+    var body: some View {
+        VStack(spacing: 18) {
+            Image(systemName: "checkmark.seal.fill")
+                .font(.system(size: 48, weight: .light))
+                .foregroundStyle(.green)
+            Text("Matrix saved").font(.title2.weight(.semibold))
+            if let r = model.correctionResult {
+                if let avg = r.fitAverage, let max = r.fitMax {
+                    Text(String(format: "Fit error avg %.2f ΔE, max %.2f ΔE across the reference patches", avg, max))
+                }
+                Text(r.url.lastPathComponent).font(.system(.caption, design: .monospaced)).textSelection(.enabled)
+            }
+            Text("Every run with the \(model.selectedInstrumentName) on \(model.selectedDisplayName) will use it from now on. Profile the display again to benefit.")
+                .foregroundStyle(.secondary)
+                .multilineTextAlignment(.center)
+                .frame(maxWidth: 460)
+            Button("Done") { model.reset() }
+                .buttonStyle(.borderedProminent)
+                .keyboardShortcut(.defaultAction)
+        }
+        .padding(32)
     }
 }
 
