@@ -1,5 +1,6 @@
 import AppKit
 import CoreGraphics
+import ColorSync
 
 /// A built-in reference image for comparing profiles: saturated primaries, memory
 /// colours, a grey ramp. Drawn in sRGB so AppKit colour-manages it through whichever
@@ -62,5 +63,62 @@ enum ProfileRenderer {
               // so tagging them honestly would make it convert them a second time.
               let retagged = converted.copy(colorSpace: CGColorSpace(name: CGColorSpace.sRGB)!) else { return image }
         return NSImage(cgImage: retagged, size: image.size)
+    }
+}
+
+
+/// Numbers behind a profile: what an sRGB grey becomes in the profile's device space
+/// (the same conversion Compare and Lightroom perform) and the profile's white point.
+enum ProfileInspector {
+    static let rampLevels = [100, 95, 90, 80, 50, 20]
+
+    struct RGB: Equatable { let r: Int, g: Int, b: Int
+        var spread: Int { max(r, g, b) - min(r, g, b) }
+        var text: String { "\(r) / \(g) / \(b)" }
+    }
+
+    static func device(forGreyPercent percent: Int, through url: URL) -> RGB? {
+        guard let data = try? Data(contentsOf: url), let target = CGColorSpace(iccData: data as CFData),
+              let srgb = CGColorSpace(name: CGColorSpace.sRGB) else { return nil }
+        let v = CGFloat(percent) / 100
+        guard let src = CGContext(data: nil, width: 2, height: 2, bitsPerComponent: 8, bytesPerRow: 0, space: srgb,
+                                  bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue) else { return nil }
+        src.setFillColor(CGColor(colorSpace: srgb, components: [v, v, v, 1])!)
+        src.fill(CGRect(x: 0, y: 0, width: 2, height: 2))
+        guard let image = src.makeImage(),
+              let dst = CGContext(data: nil, width: 2, height: 2, bitsPerComponent: 8, bytesPerRow: 0, space: target,
+                                  bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue) else { return nil }
+        dst.draw(image, in: CGRect(x: 0, y: 0, width: 2, height: 2))
+        guard let px = dst.data?.assumingMemoryBound(to: UInt8.self) else { return nil }
+        return RGB(r: Int(px[0]), g: Int(px[1]), b: Int(px[2]))
+    }
+
+    static func greyRamp(through url: URL?) -> [Int: RGB] {
+        guard let url else { return [:] }
+        var out: [Int: RGB] = [:]
+        for level in rampLevels { out[level] = device(forGreyPercent: level, through: url) }
+        return out
+    }
+
+    /// The profile's media white point (wtpt tag) as xy and correlated colour temperature.
+    /// ICC v4 profiles store D50 there and keep the real white elsewhere, which is reported as such.
+    static func whitePoint(of url: URL) -> (x: Double, y: Double, cct: Double, isD50: Bool)? {
+        guard let data = try? Data(contentsOf: url) else { return nil }
+        var error: Unmanaged<CFError>?
+        guard let p = ColorSyncProfileCreate(data as CFData, &error) else { return nil }
+        let profile = p.takeRetainedValue()
+        guard let tag = ColorSyncProfileCopyTag(profile, "wtpt" as CFString)?.takeRetainedValue() as Data?, tag.count >= 20 else { return nil }
+        func fixed(_ offset: Int) -> Double {
+            let raw = tag[offset..<offset+4].reduce(UInt32(0)) { ($0 << 8) | UInt32($1) }
+            return Double(Int32(bitPattern: raw)) / 65536.0
+        }
+        let X = fixed(8), Y = fixed(12), Z = fixed(16)
+        let sum = X + Y + Z
+        guard sum > 0 else { return nil }
+        let x = X / sum, y = Y / sum
+        let n = (x - 0.3320) / (0.1858 - y)
+        let cct = 449 * pow(n, 3) + 3525 * pow(n, 2) + 6823.3 * n + 5520.33
+        let isD50 = abs(x - 0.3457) < 0.002 && abs(y - 0.3585) < 0.002
+        return (x, y, cct, isD50)
     }
 }

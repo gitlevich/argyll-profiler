@@ -142,9 +142,15 @@ final class RunModel: ObservableObject {
         }
     }
 
+    /// Nicknames are keyed by the instrument model ("i1 DisplayPro family"), not by Argyll's
+    /// port name ("hid33: (…)"), which changes every time the device is replugged.
+    func nickname(for instrument: Argyll.Instrument) -> String? {
+        instrumentNicknames[Self.instrumentName(instrument.name)] ?? instrumentNicknames[instrument.name]
+    }
+
     /// "Colorimeter: Calibrite Display Plus HL" or "Spectrophotometer: i1 Pro 2", for pickers and prompts.
     func instrumentLabel(_ instrument: Argyll.Instrument) -> String {
-        let name = instrumentNicknames[instrument.name] ?? Self.instrumentName(instrument.name)
+        let name = nickname(for: instrument) ?? Self.instrumentName(instrument.name)
         switch Self.instrumentKind(instrument.name) {
         case .spectrophotometer: return "Spectrophotometer: \(name)"
         case .colorimeter: return "Colorimeter: \(name)"
@@ -155,9 +161,13 @@ final class RunModel: ObservableObject {
     var selectedInstrument: Argyll.Instrument? { instruments.first { $0.port == instrumentPort } }
 
     func setNickname(_ nickname: String) {
-        guard let argyllName = selectedInstrument?.name else { return }
+        guard let instrument = selectedInstrument else { return }
+        let key = Self.instrumentName(instrument.name)
         let trimmed = nickname.trimmingCharacters(in: .whitespaces)
-        if trimmed.isEmpty { instrumentNicknames.removeValue(forKey: argyllName) } else { instrumentNicknames[argyllName] = trimmed }
+        var names = instrumentNicknames
+        names.removeValue(forKey: instrument.name)                 // retire any old port-keyed entry
+        if trimmed.isEmpty || trimmed == key { names.removeValue(forKey: key) } else { names[key] = trimmed }
+        instrumentNicknames = names
     }
 
     private static func token(_ s: String) -> String {
@@ -171,7 +181,7 @@ final class RunModel: ObservableObject {
     /// Nickname if the user gave one, else the cleaned-up Argyll name.
     var selectedInstrumentName: String {
         guard let i = selectedInstrument else { return "instrument" }
-        return instrumentNicknames[i.name] ?? Self.instrumentName(i.name)
+        return nickname(for: i) ?? Self.instrumentName(i.name)
     }
 
     /// Name plus kind, for the provenance line: "Calibrite Display Plus HL colorimeter".
@@ -188,6 +198,17 @@ final class RunModel: ObservableObject {
         return [Self.token(selectedDisplayName), Self.token(selectedInstrumentName), f.string(from: date)]
             .filter { !$0.isEmpty }.joined(separator: "_")
     }
+
+    /// Existing profile names the user might want to reuse (a re-run replaces that file), newest first.
+    var existingProfileNames: [String] {
+        guard let id = selectedDisplayCGID() else { return [] }
+        return DisplayProfiles.availableProfiles(for: id)
+            .filter { !$0.isFactory }
+            .map { $0.url.deletingPathExtension().lastPathComponent }
+            .prefix(10).map { $0 }
+    }
+
+    var profileNameReplacesExisting: Bool { existingProfileNames.contains(profileName) }
 
     /// Called from the name field: once the user types their own name, stop suggesting.
     func profileNameEdited(_ text: String) {

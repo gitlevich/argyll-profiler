@@ -90,6 +90,9 @@ final class RunModelTests: XCTestCase {
         XCTAssertEqual(model.instrumentLabel(hl), "Colorimeter: i1 DisplayPro family")
         model.setNickname("Calibrite Display Plus HL")
         XCTAssertEqual(model.instrumentLabel(hl), "Colorimeter: Calibrite Display Plus HL")
+        // Replugging changes Argyll's port name; the nickname must survive that.
+        let replugged = Argyll.Instrument(port: 1, name: "hid33: (X-Rite i1 DisplayPro, ColorMunki Display)")
+        XCTAssertEqual(model.instrumentLabel(replugged), "Colorimeter: Calibrite Display Plus HL")
         XCTAssertTrue(model.profileDescription().contains("Calibrite Display Plus HL colorimeter"), model.profileDescription())
         XCTAssertTrue(model.suggestedProfileName().contains("CalibriteDisplayPlusHL"), model.suggestedProfileName())
         model.setNickname("")
@@ -132,6 +135,17 @@ final class RunModelTests: XCTestCase {
         let untouched = ProfileRenderer.render(source, through: nil)
         let cg2 = untouched.cgImage(forProposedRect: nil, context: nil, hints: nil)!
         XCTAssertEqual(Int((cg2.dataProvider!.data! as Data)[0]), 128, accuracy: 1)
+    }
+
+    func testProfileInspectorNumbers() throws {
+        let generic = URL(fileURLWithPath: "/System/Library/ColorSync/Profiles/Generic RGB Profile.icc")
+        try XCTSkipUnless(FileManager.default.fileExists(atPath: generic.path))
+        let ramp = ProfileInspector.greyRamp(through: generic)
+        XCTAssertEqual(ramp[100]?.r, 255)
+        XCTAssertEqual(ramp[50]?.r ?? 0, 109, accuracy: 2)
+        XCTAssertEqual(ramp[50]?.spread, 0)
+        let w = try XCTUnwrap(ProfileInspector.whitePoint(of: generic))
+        XCTAssertTrue(w.cct > 4500 && w.cct < 9000, "\(w)")
     }
 
     func testFailedRunStillDrainsEvents() async throws {

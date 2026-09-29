@@ -24,7 +24,7 @@ struct RootView: View {
 
 struct SetupView: View {
     @EnvironmentObject var model: RunModel
-    @State private var showNickname = false
+    @State private var nicknameDraft = ""
 
     var body: some View {
         VStack(spacing: 0) {
@@ -35,17 +35,27 @@ struct SetupView: View {
                             Text(RunModel.shortName(d.name)).tag(d.index)
                         }
                     }
-                    HStack {
-                        Picker("Instrument", selection: $model.instrumentPort) {
-                            ForEach(model.instruments, id: \.port) { i in
-                                Text(model.instrumentLabel(i)).tag(i.port)
+                    Picker("Instrument", selection: $model.instrumentPort) {
+                        ForEach(model.instruments, id: \.port) { i in
+                            Text(model.instrumentLabel(i)).tag(i.port)
+                        }
+                    }
+                    if model.selectedInstrument != nil {
+                        LabeledContent("Call it") {
+                            HStack {
+                                if nicknameDraft != model.selectedInstrumentName {
+                                    Button("Save") { model.setNickname(nicknameDraft) }.controlSize(.small)
+                                }
+                                TextField("", text: $nicknameDraft, prompt: Text("a name of your own"))
+                                    .textFieldStyle(.plain)
+                                    .multilineTextAlignment(.trailing)
+                                    .frame(width: 260)
+                                    .onSubmit { model.setNickname(nicknameDraft) }
+                                    .onAppear { nicknameDraft = model.selectedInstrumentName }
+                                    .onChange(of: model.instrumentPort) { _ in nicknameDraft = model.selectedInstrumentName }
                             }
                         }
-                        Button("Name…") { showNickname = true }
-                            .disabled(model.selectedInstrument == nil)
-                            .popover(isPresented: $showNickname) {
-                                NicknameEditor(initial: model.selectedInstrumentName) { model.setNickname($0); showNickname = false }
-                            }
+                        .font(.callout)
                     }
                     if model.selectedInstrument.map({ RunModel.instrumentKind($0.name) }) == .colorimeter {
                         if let correction = model.correctionDescription {
@@ -72,8 +82,29 @@ struct SetupView: View {
                 }
 
                 Section("Target") {
-                    TextField("Profile name", text: $model.profileName)
-                        .onChange(of: model.profileName) { model.profileNameEdited($0) }
+                    HStack {
+                        TextField("Profile name", text: $model.profileName)
+                            .onChange(of: model.profileName) { model.profileNameEdited($0) }
+                        Menu {
+                            Button(model.suggestedProfileName()) { model.profileName = model.suggestedProfileName() }
+                            if !model.existingProfileNames.isEmpty {
+                                Divider()
+                                ForEach(model.existingProfileNames, id: \.self) { name in
+                                    Button(name) { model.profileName = name }
+                                }
+                            }
+                        } label: {
+                            Image(systemName: "chevron.down")
+                        }
+                        .menuStyle(.borderlessButton)
+                        .menuIndicator(.hidden)
+                        .fixedSize()
+                        .help("Suggested name, or an existing profile to replace")
+                    }
+                    if model.profileNameReplacesExisting {
+                        Label("A profile with this name exists; the run will replace it.", systemImage: "exclamationmark.triangle")
+                            .font(.caption).foregroundStyle(.secondary)
+                    }
                     Picker("Mode", selection: $model.calibrate) {
                         Text("Profile only").tag(false)
                         Text("Calibrate, then profile").tag(true)
@@ -139,29 +170,6 @@ struct SetupView: View {
         model.calibrate
             ? "On this macOS the curves may not survive a display reconnect."
             : "Before starting, set the display to its Apple factory profile so no old curves are measured."
-    }
-}
-
-struct NicknameEditor: View {
-    let initial: String
-    let commit: (String) -> Void
-    @State private var text = ""
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            Text("What is this instrument called?").font(.headline)
-            Text("Argyll can't tell the i1 DisplayPro family apart; the name you give is used in the app and in the profile's provenance.")
-                .font(.caption).foregroundStyle(.secondary).frame(width: 300)
-            TextField("e.g. Calibrite Display Plus HL", text: $text)
-                .textFieldStyle(.roundedBorder)
-                .onSubmit { commit(text) }
-            HStack {
-                Spacer()
-                Button("Use") { commit(text) }.keyboardShortcut(.defaultAction)
-            }
-        }
-        .padding(16)
-        .onAppear { text = initial }
     }
 }
 
@@ -431,6 +439,7 @@ struct ResultsView: View {
 struct CompareView: View {
     @EnvironmentObject var model: RunModel
     @State private var dropTargeted = false
+    @State private var showNumbers = false
 
     var body: some View {
         VStack(spacing: 14) {
@@ -483,6 +492,10 @@ struct CompareView: View {
                 .font(.caption)
                 .foregroundStyle(.secondary)
 
+            DisclosureGroup("Numbers", isExpanded: $showNumbers) {
+                NumbersView(a: model.compareA, b: model.compareB)
+            }
+
             HStack {
                 Button("Apple factory profile") {
                     model.activate(model.compareProfiles.first { $0.isFactory }?.url)
@@ -521,6 +534,62 @@ struct CompareView: View {
             .keyboardShortcut(KeyEquivalent(Character(label.lowercased())), modifiers: [])
         }
         .frame(maxWidth: .infinity)
+    }
+}
+
+/// Grey ramp through A and B as device values, with tints flagged, plus white points.
+struct NumbersView: View {
+    let a: URL?
+    let b: URL?
+
+    var body: some View {
+        let rampA = ProfileInspector.greyRamp(through: a)
+        let rampB = ProfileInspector.greyRamp(through: b)
+        Grid(alignment: .leading, horizontalSpacing: 20, verticalSpacing: 4) {
+            GridRow {
+                Text("sRGB grey").foregroundStyle(.secondary)
+                Text("A → device R / G / B").foregroundStyle(.secondary)
+                Text("B → device R / G / B").foregroundStyle(.secondary)
+            }
+            .font(.caption)
+            ForEach(ProfileInspector.rampLevels, id: \.self) { level in
+                GridRow {
+                    Text("\(level) %")
+                    cell(rampA[level])
+                    cell(rampB[level])
+                }
+                .font(.system(.body, design: .monospaced))
+            }
+            GridRow {
+                Text("white point").foregroundStyle(.secondary)
+                Text(whiteText(a))
+                Text(whiteText(b))
+            }
+            .font(.caption)
+        }
+        .padding(.top, 6)
+        Text("A tint is flagged when a profile's channels differ by more than 2 for the same grey. Differences of one or two levels between A and B are normal for two measurements of one panel.")
+            .font(.caption).foregroundStyle(.secondary)
+    }
+
+    @ViewBuilder
+    private func cell(_ rgb: ProfileInspector.RGB?) -> some View {
+        if let rgb {
+            HStack(spacing: 6) {
+                Text(rgb.text)
+                if rgb.spread > 2 {
+                    Text("tint").font(.caption2).foregroundStyle(.orange)
+                }
+            }
+        } else {
+            Text("—").foregroundStyle(.secondary)
+        }
+    }
+
+    private func whiteText(_ url: URL?) -> String {
+        guard let url, let w = ProfileInspector.whitePoint(of: url) else { return "—" }
+        if w.isD50 { return "D50 (v4 profile, adapted)" }
+        return String(format: "x %.4f  y %.4f  ≈ %.0f K", w.x, w.y, w.cct)
     }
 }
 

@@ -49,3 +49,14 @@ Fix: the Compare screen converts the reference image through the active profile 
 (`ProfileRenderer`), the way Lightroom does, and shows the result re-tagged as sRGB.
 A/B now differ on screen by the profiles' real difference.
 Test: `RunModelTests.testProfileRendererConvertsThroughTheProfile`.
+
+## 5. Instrument nickname and correction matrix vanished after replugging the HL — fixed 2026-09-28
+
+Nicknames were keyed by Argyll's port name ("hid1: (X-Rite i1 DisplayPro, ColorMunki
+Display)"), which changes on every replug ("hid33: (…)"). After the HL was reconnected
+the app fell back to "i1 DisplayPro family", and since the correction file is named from
+the nickname, the matrix was no longer found either.
+
+Fix: key nicknames by the instrument model name; old port-keyed entries are retired on
+the next save.
+Test: `RunModelTests.testInstrumentKindsAndNicknames` (replugged-name assertion).
