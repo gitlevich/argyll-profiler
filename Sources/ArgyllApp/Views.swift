@@ -458,28 +458,24 @@ struct CompareView: View {
             Text("Comparing profiles on \(model.compareDisplayName)")
                 .font(.title3.weight(.semibold))
 
-            // Two rows on one skeleton: full-width column, fixed 48-pt middle, full-width column.
-            VStack(spacing: 8) {
-                HStack(spacing: 12) {
-                    profilePicker("A", selection: $model.compareA)
-                    Color.clear.frame(width: 48, height: 1)
-                    profilePicker("B", selection: $model.compareB)
+            // One row: A + menu, switch, B + menu. The active letter is highlighted.
+            HStack(spacing: 12) {
+                profilePicker("A", selection: $model.compareA, url: model.compareA)
+                Button {
+                    model.toggleCompare()
+                } label: {
+                    Image(systemName: "arrow.left.arrow.right")
+                        .font(.body.weight(.semibold))
+                        .frame(width: 40, height: 22)
                 }
-                HStack(spacing: 12) {
-                    showButton("A", url: model.compareA)
-                    Button {
-                        model.toggleCompare()
-                    } label: {
-                        Image(systemName: "arrow.left.arrow.right")
-                            .font(.body.weight(.semibold))
-                            .frame(width: 48, height: 24)
-                    }
-                    .buttonStyle(.bordered)
-                    .keyboardShortcut(.space, modifiers: [])
-                    .help("Switch the shown profile (space)")
-                    showButton("B", url: model.compareB)
-                }
+                .buttonStyle(.bordered)
+                .keyboardShortcut(.space, modifiers: [])
+                .help("Switch the shown profile (space)")
+                profilePicker("B", selection: $model.compareB, url: model.compareB)
             }
+            Text("Showing \(model.activeProfile == model.compareA ? "A" : (model.activeProfile == model.compareB ? "B" : "neither"))")
+                .font(.callout.weight(.medium))
+                .foregroundStyle(.secondary)
 
             ZStack {
                 if let image = model.renderedImage ?? model.referenceImage {
@@ -526,9 +522,22 @@ struct CompareView: View {
         .padding(24)
     }
 
-    private func profilePicker(_ label: String, selection: Binding<URL?>) -> some View {
-        HStack(spacing: 8) {
-            Text(label).font(.headline).foregroundStyle(.secondary).frame(width: 14)
+    /// Letter badge (highlighted when that profile is showing; tap to show it) plus its menu.
+    private func profilePicker(_ label: String, selection: Binding<URL?>, url: URL?) -> some View {
+        let active = model.activeProfile == url
+        return HStack(spacing: 8) {
+            Button {
+                model.activate(url)
+            } label: {
+                Text(label)
+                    .font(.headline)
+                    .foregroundStyle(active ? Color.white : Color.secondary)
+                    .frame(width: 24, height: 22)
+                    .background(active ? Color.accentColor : Color.clear, in: RoundedRectangle(cornerRadius: 6))
+            }
+            .buttonStyle(.plain)
+            .keyboardShortcut(KeyEquivalent(Character(label.lowercased())), modifiers: [])
+            .help("Show \(label) (key \(label))")
             Picker(selection: selection) {
                 ForEach(model.compareProfiles) { p in
                     Text(RunModel.compactLabel(p)).tag(Optional(p.url))
@@ -537,23 +546,6 @@ struct CompareView: View {
             .labelsHidden()
             .help(model.profileName(for: selection.wrappedValue))
         }
-        .frame(maxWidth: .infinity)
-    }
-
-    private func showButton(_ label: String, url: URL?) -> some View {
-        let active = model.activeProfile == url
-        return Button {
-            model.activate(url)
-        } label: {
-            HStack(spacing: 6) {
-                if active { Image(systemName: "checkmark.circle.fill").foregroundStyle(.green) }
-                Text(active ? "Showing \(label)" : "Show \(label)").font(.headline)
-            }
-            .frame(maxWidth: .infinity, minHeight: 28)
-        }
-        .buttonStyle(.bordered)
-        .tint(active ? Color.accentColor : Color.secondary)
-        .keyboardShortcut(KeyEquivalent(Character(label.lowercased())), modifiers: [])
         .frame(maxWidth: .infinity)
     }
 }
