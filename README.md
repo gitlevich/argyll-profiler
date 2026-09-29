@@ -60,6 +60,16 @@ Profiles are named so you can tell them apart later, on disk and in every menu:
 `StudioDisplay_i1Pro2_2026-09-28_1811.icc`, described as "Studio Display, i1 Pro 2
 spectrophotometer, 2026-09-28 18:11 (Argyll Profiler 0.3, profile only, 175 patches)".
 
+### MacBook Pro and Pro Display XDR: keep the factory profile
+
+XDR displays are mini-LED panels with local dimming: the backlight behind a small
+patch behaves differently from the backlight behind a whole photograph, so a profile
+measured from patches describes a state the panel is not in when you look at an image;
+the visible symptom is lifted, pale blacks. The factory profile ("Color LCD") describes
+the intended response, and the dimming controller makes whole images match it. On these
+displays keep the factory profile and use the app to verify the white point rather than
+to install a profile. Edge-lit displays like the Studio Display profile well.
+
 ## Colorimeter or spectrophotometer, and the correction matrix
 
 A spectrophotometer (i1 Pro 2) is the reference: it reads white point and saturated
