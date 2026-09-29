@@ -87,7 +87,16 @@ public actor ProfilingSession {
     }
 
     public func answerPrompt() { current?.answerPrompt() }
-    public func abort() { current?.abort() }
+    /// Escape lets the tool clean up (restore the display, close its window); if it is
+    /// still running two seconds later it is terminated.
+    public func abort() {
+        guard let runner = current else { return }
+        runner.abort()
+        Task {
+            try? await Task.sleep(nanoseconds: 2_000_000_000)
+            runner.kill()
+        }
+    }
 
     /// Returns the URL of the finished profile (installed too, unless `installProfile` is false).
     public func run() async throws -> URL {

@@ -85,7 +85,8 @@ public actor CorrectionSession {
     }
 
     public func answerPrompt() { runner?.answerPrompt() }
-    public func abort() { runner?.abort() }
+    /// ccxxmake's menu ignores Escape, so cancelling terminates the tool outright.
+    public func abort() { runner?.kill() }
 
     public func run() async throws -> Result {
         defer { continuation.finish() }
