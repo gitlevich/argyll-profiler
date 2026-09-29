@@ -11,7 +11,7 @@ cd "$(dirname "$0")/.."
 
 CONFIG="${CONFIG:-release}"
 BREW="${BREW:-/opt/homebrew}"
-TOOLS="targen dispcal dispread colprof dispwin spotread"
+TOOLS="targen dispcal dispread colprof dispwin spotread ccxxmake"
 IDENTITY="${IDENTITY:-$(security find-identity -v -p codesigning 2>/dev/null | grep -o '"Developer ID Application: [^"]*"' | head -1 | tr -d '"')}"
 
 APP=".build/Argyll Profiler.app"
