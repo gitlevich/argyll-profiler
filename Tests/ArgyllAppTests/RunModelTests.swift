@@ -60,8 +60,22 @@ final class RunModelTests: XCTestCase {
         model.displayIndex = 2
         XCTAssertEqual(model.profileName, "MyOwnName")
         let description = model.profileDescription(at: date)
-        XCTAssertTrue(description.contains("Studio Display · i1 Pro 2 · Argyll Profiler"), description)
+        XCTAssertTrue(description.contains("Studio Display - i1 Pro 2 - Argyll Profiler"), description)
         XCTAssertTrue(description.contains("profile only, 175 patches"), description)
+    }
+
+    /// BUGS.md #3. colprof writes the ICC v2 description tag as 7-bit ASCII, so any
+    /// non-ASCII separator comes out as "?" in System Settings and in the app.
+    func testProfileDescriptionIsPlainASCII() {
+        let model = RunModel()
+        model.displays = [Argyll.Display(index: 2, name: "Studio Display, at -621, -1800, width 3200, height 1800")]
+        model.instruments = [Argyll.Instrument(port: 1, name: "hid1: (X-Rite i1 DisplayPro, ColorMunki Display)")]
+        model.displayIndex = 2
+        model.instrumentPort = 1
+        let description = model.profileDescription()
+        XCTAssertTrue(description.allSatisfy { $0.isASCII }, description)
+        XCTAssertTrue(description.hasPrefix("Studio Display - i1 DisplayPro - Argyll Profiler"), description)
+        XCTAssertEqual(RunModel.instrumentName("hid1: (X-Rite i1 DisplayPro, ColorMunki Display)"), "i1 DisplayPro")
     }
 
     func testFailedRunStillDrainsEvents() async throws {

@@ -468,12 +468,13 @@ struct CompareView: View {
             .controlSize(.large)
             .tint(active ? Color.accentColor : Color.secondary)
             .keyboardShortcut(KeyEquivalent(Character(label.lowercased())), modifiers: [])
-            Text(model.profileName(for: url))
+            Text(url?.deletingPathExtension().lastPathComponent ?? "—")
                 .font(.caption)
                 .foregroundStyle(active ? .primary : .secondary)
                 .lineLimit(1)
                 .truncationMode(.middle)
                 .frame(width: 220)
+                .help(model.profileName(for: url))
         }
     }
 }

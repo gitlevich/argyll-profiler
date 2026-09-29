@@ -22,3 +22,15 @@ the first app run: the results screen showed only the profile name and location.
 
 Fix: the run task awaits the consumer task before calling `finish`/`fail`.
 Test: `RunModelTests.testSummaryIsCompleteWhenRunReturnsBeforeEventsDrain`.
+
+## 3. Profile description shows "?" between fields — fixed 2026-09-28
+
+The provenance line written with `colprof -D` used "·" as a separator. colprof stores the
+ICC v2 description tag as 7-bit ASCII, so System Settings and the Compare screen showed
+"Studio Display ? i1 DisplayPro ? …". The Compare caption also truncated the middle of
+that long string, hiding the instrument and date.
+
+Fix: ASCII separators and "gamma" instead of "γ", with a final non-ASCII scrub; the Compare
+caption shows the file name and the full description as a tooltip; the i1d3 family is
+named "i1 DisplayPro" instead of Argyll's "i1 DisplayPro, ColorMunki Display".
+Test: `RunModelTests.testProfileDescriptionIsPlainASCII`.

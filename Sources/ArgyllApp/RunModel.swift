@@ -95,13 +95,16 @@ final class RunModel: ObservableObject {
         argyllName.components(separatedBy: ", at ").first ?? argyllName
     }
 
-    /// "usb1: (X-Rite i1 Pro 2)" → "i1 Pro 2"
+    /// "usb1: (X-Rite i1 Pro 2)" → "i1 Pro 2"; the i1d3 family (i1 DisplayPro, ColorMunki
+    /// Display, Calibrite Display SL/Pro HL/Plus HL) all report as "i1 DisplayPro, ColorMunki Display".
     static func instrumentName(_ argyllName: String) -> String {
         var s = argyllName
         if let open = s.firstIndex(of: "("), let close = s.lastIndex(of: ")"), open < close {
             s = String(s[s.index(after: open)..<close])
         }
-        return s.replacingOccurrences(of: "X-Rite ", with: "").trimmingCharacters(in: .whitespaces)
+        s = s.replacingOccurrences(of: "X-Rite ", with: "").trimmingCharacters(in: .whitespaces)
+        if s.hasPrefix("i1 DisplayPro") { return "i1 DisplayPro" }
+        return s
     }
 
     private static func token(_ s: String) -> String {
@@ -133,12 +136,14 @@ final class RunModel: ObservableObject {
         if !nameIsCustom { profileName = suggestedProfileName() }
     }
 
-    /// Long-form provenance for the ICC description tag.
+    /// Long-form provenance for the ICC description tag. ASCII only: colprof writes the
+    /// v2 description tag as 7-bit text and anything else becomes "?" (BUGS.md #3).
     func profileDescription(at date: Date = Date()) -> String {
         let f = DateFormatter()
         f.dateFormat = "yyyy-MM-dd HH:mm"
-        let mode = calibrate ? "calibrated \(whitePointKelvin == 0 ? "native" : "\(whitePointKelvin) K") γ\(gamma)" : "profile only"
-        return "\(selectedDisplayName) · \(selectedInstrumentName) · Argyll Profiler \(Self.appVersion) · \(f.string(from: date)) · \(mode), \(patchCount) patches"
+        let mode = calibrate ? "calibrated \(whitePointKelvin == 0 ? "native" : "\(whitePointKelvin) K") gamma \(gamma)" : "profile only"
+        let text = "\(selectedDisplayName) - \(selectedInstrumentName) - Argyll Profiler \(Self.appVersion) - \(f.string(from: date)) - \(mode), \(patchCount) patches"
+        return String(text.unicodeScalars.map { $0.isASCII ? Character($0) : "-" })
     }
 
     static func runsDirectory() -> URL {
