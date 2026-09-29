@@ -178,10 +178,12 @@ struct SetupView: View {
             HStack(alignment: .firstTextBaseline) {
                 Button("Compare profiles…") { model.openCompare() }
                     .disabled(model.displays.isEmpty)
-                Text(footnote)
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                    .lineLimit(2)
+                if model.calibrate {
+                    Text("Calibration adjustments may not survive a display reconnect on this macOS.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(2)
+                }
                 Spacer()
                 Button("Start") { model.start() }
                     .buttonStyle(.borderedProminent)
@@ -193,11 +195,6 @@ struct SetupView: View {
         }
     }
 
-    private var footnote: String {
-        model.calibrate
-            ? "Calibration adjustments may not survive a display reconnect on this macOS."
-            : "Nothing to prepare: leave the display on the Preset you normally use and press Start."
-    }
 }
 
 // MARK: - Run
