@@ -196,7 +196,7 @@ struct SetupView: View {
     private var footnote: String {
         model.calibrate
             ? "Calibration adjustments may not survive a display reconnect on this macOS."
-            : "Keep the display on the Preset you use every day (System Settings > Displays). The app measures through Apple's own profile and installs the new one when done."
+            : "Nothing to prepare: leave the display on the Preset you normally use and press Start."
     }
 }
 
