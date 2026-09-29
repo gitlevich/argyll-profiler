@@ -98,6 +98,24 @@ do {
             await report(tool, event, control: control) { runner.answerPrompt() }
         }
 
+    case "profiles":
+        // argyllkit-cli profiles --display N        list assignable profiles, mark the active one
+        // argyllkit-cli profiles --display N --use PATH|factory   assign one
+        guard let display = value("--display", in: args).flatMap(Int.init) else { usage() }
+        let displays = try await Argyll.displays()
+        guard let entry = displays.first(where: { $0.index == display }),
+              let id = DisplayProfiles.displayID(forArgyllName: entry.name) else {
+            print("display \(display) not found"); exit(1)
+        }
+        if let use = value("--use", in: args) {
+            let ok = DisplayProfiles.setProfile(use == "factory" ? nil : URL(fileURLWithPath: use), for: id)
+            print(ok ? "assigned" : "failed")
+        }
+        let current = DisplayProfiles.currentProfileURL(for: id)
+        for p in DisplayProfiles.availableProfiles(for: id) {
+            print("\(p.url == current ? "*" : " ") \(p.isFactory ? "[factory] " : "")\(p.name)  —  \(p.url.path)")
+        }
+
     default:
         usage()
     }

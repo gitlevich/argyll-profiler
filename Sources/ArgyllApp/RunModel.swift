@@ -2,11 +2,11 @@ import Foundation
 import AppKit
 import ArgyllKit
 
-/// All app state: discovery, setup choices, and the live run.
+/// All app state: discovery, setup choices, the live run, and profile comparison.
 @MainActor
 final class RunModel: ObservableObject {
     enum Phase: Equatable {
-        case setup, running, finished
+        case setup, running, finished, compare
         case failed(String)
     }
 
@@ -34,6 +34,8 @@ final class RunModel: ObservableObject {
         }
     }
 
+    static let appVersion = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "dev"
+
     // Discovery
     @Published var displays: [Argyll.Display] = []
     @Published var instruments: [Argyll.Instrument] = []
@@ -41,9 +43,9 @@ final class RunModel: ObservableObject {
     @Published var discovering = false
 
     // Setup choices
-    @Published var displayIndex = 1
-    @Published var instrumentPort = 1
-    @Published var profileName = RunModel.defaultProfileName()
+    @Published var displayIndex = 1 { didSet { refreshSuggestedName() } }
+    @Published var instrumentPort = 1 { didSet { refreshSuggestedName() } }
+    @Published var profileName = ""
     @Published var calibrate = false
     @Published var whitePointKelvin = 6500          // 0 = native
     @Published var gamma = 2.2
@@ -62,29 +64,81 @@ final class RunModel: ObservableObject {
     @Published var log: [String] = []
     @Published var summary: Summary?
 
+    // Compare
+    @Published var compareProfiles: [InstalledProfile] = []
+    @Published var compareA: URL?
+    @Published var compareB: URL?
+    @Published var activeProfile: URL?
+    @Published var referenceImage: NSImage?
+    @Published var compareDisplayName = ""
+    private var compareDisplayID: CGDirectDisplayID?
+    /// Whatever the display was using when the last run started.
+    private(set) var previousProfileURL: URL?
+
     private var session: ProfilingSession?
     private var pending = Summary(profileURL: URL(fileURLWithPath: "/"), installed: false)
     private var controlPath: String?
     private var logFile: FileHandle?
+    private var nameIsCustom = false
 
     private static let luminanceRegex = try! Regex("Display Luminance = ([0-9.]+)")
     private static let whiteRegex = try! Regex("White point XYZ = ([0-9.]+) ([0-9.]+) ([0-9.]+)")
     private static let fitRegex = try! Regex("peak err = ([0-9.]+), avg err = ([0-9.]+)")
 
-    // MARK: - Names and paths
-
-    static func defaultProfileName() -> String {
-        let f = DateFormatter()
-        f.dateFormat = "yyyy-MM-dd"
-        return "Display_" + f.string(from: Date())
+    init() {
+        profileName = suggestedProfileName()
     }
+
+    // MARK: - Names and provenance
 
     static func shortName(_ argyllName: String) -> String {
         argyllName.components(separatedBy: ", at ").first ?? argyllName
     }
 
+    /// "usb1: (X-Rite i1 Pro 2)" → "i1 Pro 2"
+    static func instrumentName(_ argyllName: String) -> String {
+        var s = argyllName
+        if let open = s.firstIndex(of: "("), let close = s.lastIndex(of: ")"), open < close {
+            s = String(s[s.index(after: open)..<close])
+        }
+        return s.replacingOccurrences(of: "X-Rite ", with: "").trimmingCharacters(in: .whitespaces)
+    }
+
+    private static func token(_ s: String) -> String {
+        String(s.unicodeScalars.filter { CharacterSet.alphanumerics.contains($0) })
+    }
+
     var selectedDisplayName: String {
         displays.first { $0.index == displayIndex }.map { Self.shortName($0.name) } ?? "display \(displayIndex)"
+    }
+
+    var selectedInstrumentName: String {
+        instruments.first { $0.port == instrumentPort }.map { Self.instrumentName($0.name) } ?? "instrument"
+    }
+
+    /// StudioDisplay_i1Pro2_ArgyllProfiler_2026-09-28_1830
+    func suggestedProfileName(at date: Date = Date()) -> String {
+        let f = DateFormatter()
+        f.dateFormat = "yyyy-MM-dd_HHmm"
+        return [Self.token(selectedDisplayName), Self.token(selectedInstrumentName), "ArgyllProfiler", f.string(from: date)]
+            .filter { !$0.isEmpty }.joined(separator: "_")
+    }
+
+    /// Called from the name field: once the user types their own name, stop suggesting.
+    func profileNameEdited(_ text: String) {
+        nameIsCustom = text != suggestedProfileName()
+    }
+
+    private func refreshSuggestedName() {
+        if !nameIsCustom { profileName = suggestedProfileName() }
+    }
+
+    /// Long-form provenance for the ICC description tag.
+    func profileDescription(at date: Date = Date()) -> String {
+        let f = DateFormatter()
+        f.dateFormat = "yyyy-MM-dd HH:mm"
+        let mode = calibrate ? "calibrated \(whitePointKelvin == 0 ? "native" : "\(whitePointKelvin) K") γ\(gamma)" : "profile only"
+        return "\(selectedDisplayName) · \(selectedInstrumentName) · Argyll Profiler \(Self.appVersion) · \(f.string(from: date)) · \(mode), \(patchCount) patches"
     }
 
     static func runsDirectory() -> URL {
@@ -92,10 +146,15 @@ final class RunModel: ObservableObject {
         return base.appendingPathComponent("ArgyllApp/Runs", isDirectory: true)
     }
 
+    func selectedDisplayCGID() -> CGDirectDisplayID? {
+        displays.first { $0.index == displayIndex }.flatMap { DisplayProfiles.displayID(forArgyllName: $0.name) }
+    }
+
     // MARK: - Test harness (launch arguments)
 
     /// `--control PATH` answers prompts when PATH appears; `--log PATH` mirrors the log to a
-    /// file; `--autostart` runs discovery and starts immediately. The rest preset the form.
+    /// file; `--autostart` runs discovery and starts immediately; `--compare` opens the
+    /// compare screen after discovery. The rest preset the form.
     func configure(arguments: [String]) {
         func value(_ flag: String) -> String? {
             guard let i = arguments.firstIndex(of: flag), i + 1 < arguments.count else { return nil }
@@ -108,14 +167,13 @@ final class RunModel: ObservableObject {
         }
         if let d = value("--display").flatMap(Int.init) { displayIndex = d }
         if let p = value("--patches").flatMap(Int.init) { patchCount = p }
-        if let n = value("--name") { profileName = n }
+        if let n = value("--name") { profileName = n; nameIsCustom = true }
         if arguments.contains("--no-install") { installProfile = false }
         if arguments.contains("--skip-cal") { skipInstrumentCalibration = true }
         if arguments.contains("--autostart") {
-            Task {
-                await discover()
-                start()
-            }
+            Task { await discover(); start() }
+        } else if arguments.contains("--compare") {
+            Task { await discover(); openCompare() }
         }
     }
 
@@ -140,6 +198,7 @@ final class RunModel: ObservableObject {
                 instrumentPort = instruments.first { $0.name.localizedCaseInsensitiveContains("i1") }?.port
                     ?? instruments.first?.port ?? 1
             }
+            refreshSuggestedName()
             note("DISCOVERED displays=\(displays.count) instruments=\(instruments.count) argyll=\(Argyll.location ?? "not found")")
         } catch {
             discoveryError = "\(error)"
@@ -155,10 +214,18 @@ final class RunModel: ObservableObject {
         options.quality = quality
         options.installProfile = installProfile
         options.skipInstrumentCalibrationIfPossible = skipInstrumentCalibration
+        options.profileDescription = profileDescription()
+        options.deviceModel = selectedDisplayName
+        options.copyright = "Made with Argyll Profiler \(Self.appVersion) and ArgyllCMS, measured with \(selectedInstrumentName)"
         if calibrate {
             options.calibration = ProfilingOptions.Calibration(
                 whitePointKelvin: whitePointKelvin == 0 ? nil : whitePointKelvin,
                 gamma: gamma)
+        }
+
+        if let id = selectedDisplayCGID() {
+            previousProfileURL = DisplayProfiles.currentProfileURL(for: id)
+            note("PREVIOUS \(previousProfileURL?.lastPathComponent ?? "none")")
         }
 
         let directory = Self.runsDirectory().appendingPathComponent(profileName, isDirectory: true)
@@ -228,7 +295,61 @@ final class RunModel: ObservableObject {
         phase = .setup
         prompt = nil
         progress = nil
-        profileName = Self.defaultProfileName()
+        nameIsCustom = false
+        profileName = suggestedProfileName()
+    }
+
+    // MARK: - Compare
+
+    /// Opens the compare screen for the selected display, preselecting the profile from
+    /// the last run against whatever the display used before it.
+    func openCompare() {
+        guard let id = selectedDisplayCGID() else { return }
+        compareDisplayID = id
+        compareDisplayName = selectedDisplayName
+        compareProfiles = DisplayProfiles.availableProfiles(for: id)
+        activeProfile = DisplayProfiles.currentProfileURL(for: id)
+        let factory = compareProfiles.first { $0.isFactory }?.url
+        let installedNew = summary.flatMap { s in compareProfiles.first { $0.url.lastPathComponent == s.profileURL.lastPathComponent }?.url }
+        compareA = installedNew ?? activeProfile ?? factory
+        compareB = previousProfileURL ?? compareProfiles.first { $0.url != compareA }?.url ?? factory
+        if referenceImage == nil { referenceImage = TestImage.make() }
+        phase = .compare
+        note("COMPARE active=\(activeProfile?.lastPathComponent ?? "factory") A=\(compareA?.lastPathComponent ?? "-") B=\(compareB?.lastPathComponent ?? "-")")
+    }
+
+    func activate(_ url: URL?) {
+        guard let id = compareDisplayID else { return }
+        let factory = compareProfiles.first { $0.isFactory }?.url
+        let target = (url == factory) ? nil : url          // nil = revert to factory, the clean way
+        if DisplayProfiles.setProfile(target, for: id) {
+            activeProfile = url ?? factory
+            note("ACTIVATED \(activeProfile?.lastPathComponent ?? "factory")")
+        } else {
+            note("ACTIVATE FAILED \(url?.lastPathComponent ?? "factory")")
+        }
+    }
+
+    func toggleCompare() {
+        activate(activeProfile == compareA ? compareB : compareA)
+    }
+
+    func profileName(for url: URL?) -> String {
+        guard let url else { return "—" }
+        return compareProfiles.first { $0.url == url }?.name ?? url.deletingPathExtension().lastPathComponent
+    }
+
+    func chooseReferenceImage() {
+        let panel = NSOpenPanel()
+        panel.allowedContentTypes = [.image]
+        panel.allowsMultipleSelection = false
+        if panel.runModal() == .OK, let url = panel.url, let image = NSImage(contentsOf: url) {
+            referenceImage = image
+        }
+    }
+
+    func useReferenceImage(at url: URL) {
+        if let image = NSImage(contentsOf: url) { referenceImage = image }
     }
 
     // MARK: - Event handling

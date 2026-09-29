@@ -160,8 +160,16 @@ public enum Argyll {
         throw Failure.toolNotFound(tool)
     }
 
-    public struct Display: Sendable { public let index: Int; public let name: String }
-    public struct Instrument: Sendable { public let port: Int; public let name: String }
+    public struct Display: Sendable {
+        public let index: Int
+        public let name: String
+        public init(index: Int, name: String) { self.index = index; self.name = name }
+    }
+    public struct Instrument: Sendable {
+        public let port: Int
+        public let name: String
+        public init(port: Int, name: String) { self.port = port; self.name = name }
+    }
 
     /// The "-d n" list from `dispwin -?`. Index 1 is what Argyll calls the primary display.
     public static func displays() async throws -> [Display] {

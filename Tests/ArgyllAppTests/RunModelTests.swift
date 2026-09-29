@@ -37,6 +37,33 @@ final class RunModelTests: XCTestCase {
         XCTAssertEqual(model.summary?.correlatedColorTemperature ?? 0, 7000, accuracy: 700)
     }
 
+    func testInstrumentAndDisplayNamesAreCleanedUp() {
+        XCTAssertEqual(RunModel.instrumentName("usb1: (X-Rite i1 Pro 2)"), "i1 Pro 2")
+        XCTAssertEqual(RunModel.instrumentName("/dev/cu.BathysMG"), "/dev/cu.BathysMG")
+        XCTAssertEqual(RunModel.shortName("Studio Display, at -621, -1800, width 3200, height 1800"), "Studio Display")
+    }
+
+    func testSuggestedProfileNameCarriesProvenance() {
+        let model = RunModel()
+        model.displays = [Argyll.Display(index: 2, name: "Studio Display, at -621, -1800, width 3200, height 1800")]
+        model.instruments = [Argyll.Instrument(port: 1, name: "usb1: (X-Rite i1 Pro 2)")]
+        model.displayIndex = 2
+        model.instrumentPort = 1
+        let date = Date(timeIntervalSince1970: 1_790_000_000)   // 2026-09-21 in UTC; formatter uses local time
+        let name = model.suggestedProfileName(at: date)
+        XCTAssertTrue(name.hasPrefix("StudioDisplay_i1Pro2_ArgyllProfiler_2026-09-2"), name)
+        XCTAssertFalse(name.contains(" "))
+        // The form follows the selection until the user types their own name.
+        XCTAssertEqual(model.profileName, model.suggestedProfileName())
+        model.profileName = "MyOwnName"
+        model.profileNameEdited(model.profileName)
+        model.displayIndex = 2
+        XCTAssertEqual(model.profileName, "MyOwnName")
+        let description = model.profileDescription(at: date)
+        XCTAssertTrue(description.contains("Studio Display · i1 Pro 2 · Argyll Profiler"), description)
+        XCTAssertTrue(description.contains("profile only, 175 patches"), description)
+    }
+
     func testFailedRunStillDrainsEvents() async throws {
         let model = RunModel()
         var continuation: AsyncStream<(ProfilingSession.Stage, ArgyllEvent)>.Continuation!

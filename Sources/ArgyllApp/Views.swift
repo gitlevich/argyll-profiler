@@ -11,10 +11,11 @@ struct RootView: View {
             case .setup: SetupView()
             case .running: RunView()
             case .finished: ResultsView()
+            case .compare: CompareView()
             case .failed(let message): FailedView(message: message)
             }
         }
-        .frame(minWidth: 580, idealWidth: 600, minHeight: 640, idealHeight: 680)
+        .frame(minWidth: 720, idealWidth: 720, minHeight: 700, idealHeight: 760)
         .task { await model.discoverIfNeeded() }
     }
 }
@@ -35,7 +36,7 @@ struct SetupView: View {
                     }
                     Picker("Instrument", selection: $model.instrumentPort) {
                         ForEach(model.instruments, id: \.port) { i in
-                            Text(i.name).tag(i.port)
+                            Text(RunModel.instrumentName(i.name)).tag(i.port)
                         }
                     }
                     HStack {
@@ -55,6 +56,7 @@ struct SetupView: View {
 
                 Section("Target") {
                     TextField("Profile name", text: $model.profileName)
+                        .onChange(of: model.profileName) { model.profileNameEdited($0) }
                     Picker("Mode", selection: $model.calibrate) {
                         Text("Profile only").tag(false)
                         Text("Calibrate, then profile").tag(true)
@@ -93,9 +95,12 @@ struct SetupView: View {
             Divider()
 
             HStack(alignment: .firstTextBaseline) {
+                Button("Compare profiles…") { model.openCompare() }
+                    .disabled(model.displays.isEmpty)
                 Text(footnote)
                     .font(.caption)
                     .foregroundStyle(.secondary)
+                    .lineLimit(2)
                 Spacer()
                 Button("Start") { model.start() }
                     .buttonStyle(.borderedProminent)
@@ -270,9 +275,9 @@ struct PromptCard: View {
     private var instructions: String {
         switch prompt {
         case .placeOnWhiteTile:
-            return "Put the i1Pro 2 on its white reference tile, then press Continue."
+            return "Put the \(model.selectedInstrumentName) on its white reference tile, then press Continue."
         case .placeOnDisplay:
-            return "A patch window is open on \(model.selectedDisplayName). Put the i1Pro 2 flat against it, then press Continue."
+            return "A patch window is open on \(model.selectedDisplayName). Put the \(model.selectedInstrumentName) flat against it, then press Continue."
         case .other(let text):
             return text
         }
@@ -313,7 +318,7 @@ struct ResultsView: View {
             Image(systemName: "checkmark.seal.fill")
                 .font(.system(size: 48, weight: .light))
                 .foregroundStyle(.green)
-            Text(model.summary?.installed == true ? "Profile installed" : "Profile built")
+            Text(model.summary?.installed == true ? "Profile installed and active" : "Profile built")
                 .font(.title2.weight(.semibold))
 
             if let s = model.summary {
@@ -345,10 +350,15 @@ struct ResultsView: View {
                 }
             }
 
-            Button("New run") { model.reset() }
-                .buttonStyle(.borderedProminent)
-                .keyboardShortcut(.defaultAction)
-                .padding(.top, 8)
+            HStack(spacing: 12) {
+                Button("New run") { model.reset() }
+                if model.summary?.installed == true {
+                    Button("Compare with previous") { model.openCompare() }
+                        .buttonStyle(.borderedProminent)
+                        .keyboardShortcut(.defaultAction)
+                }
+            }
+            .padding(.top, 8)
         }
         .padding(32)
     }
@@ -358,6 +368,112 @@ struct ResultsView: View {
         GridRow {
             Text(key).foregroundStyle(.secondary)
             Text(value).textSelection(.enabled)
+        }
+    }
+}
+
+// MARK: - Compare
+
+struct CompareView: View {
+    @EnvironmentObject var model: RunModel
+    @State private var dropTargeted = false
+
+    var body: some View {
+        VStack(spacing: 14) {
+            Text("Comparing profiles on \(model.compareDisplayName)")
+                .font(.title3.weight(.semibold))
+
+            HStack(spacing: 16) {
+                slot("A", selection: $model.compareA).frame(maxWidth: .infinity)
+                slot("B", selection: $model.compareB).frame(maxWidth: .infinity)
+            }
+
+            ZStack {
+                if let image = model.referenceImage {
+                    Image(nsImage: image)
+                        .resizable()
+                        .aspectRatio(contentMode: .fit)
+                }
+                if dropTargeted {
+                    RoundedRectangle(cornerRadius: 8).strokeBorder(.tint, lineWidth: 3)
+                }
+            }
+            .frame(maxWidth: .infinity, minHeight: 220, maxHeight: 360)
+            .clipShape(RoundedRectangle(cornerRadius: 8))
+            .dropDestination(for: URL.self) { urls, _ in
+                guard let url = urls.first else { return false }
+                model.useReferenceImage(at: url)
+                return true
+            } isTargeted: { dropTargeted = $0 }
+
+            HStack {
+                Text("Drop a photo onto the image, or")
+                    .font(.caption).foregroundStyle(.secondary)
+                Button("Choose…") { model.chooseReferenceImage() }.controlSize(.small)
+                Button("Built-in patches") { model.referenceImage = TestImage.make() }.controlSize(.small)
+                Spacer()
+            }
+
+            HStack(alignment: .top, spacing: 12) {
+                sideButton("A", url: model.compareA)
+                Button {
+                    model.toggleCompare()
+                } label: {
+                    Label("Switch", systemImage: "arrow.left.arrow.right")
+                }
+                .controlSize(.large)
+                .keyboardShortcut(.space, modifiers: [])
+                .padding(.top, 2)
+                sideButton("B", url: model.compareB)
+            }
+
+            Text("Space bar switches, A and B keys select. Whichever is active stays when you leave.")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+
+            HStack {
+                Button("Apple factory profile") {
+                    model.activate(model.compareProfiles.first { $0.isFactory }?.url)
+                }
+                Spacer()
+                Button("Done") { model.reset() }
+                    .keyboardShortcut(.defaultAction)
+            }
+        }
+        .padding(24)
+    }
+
+    private func slot(_ label: String, selection: Binding<URL?>) -> some View {
+        Picker(label, selection: selection) {
+            ForEach(model.compareProfiles) { p in
+                Text(p.isFactory ? "\(p.name) (Apple factory)" : p.name)
+                    .tag(Optional(p.url))
+            }
+        }
+    }
+
+    private func sideButton(_ label: String, url: URL?) -> some View {
+        let active = model.activeProfile == url
+        return VStack(spacing: 6) {
+            Button {
+                model.activate(url)
+            } label: {
+                HStack(spacing: 6) {
+                    if active { Image(systemName: "checkmark.circle.fill").foregroundStyle(.green) }
+                    Text(label).font(.title3.weight(.bold))
+                }
+                .frame(width: 200)
+            }
+            .buttonStyle(.bordered)
+            .controlSize(.large)
+            .tint(active ? Color.accentColor : Color.secondary)
+            .keyboardShortcut(KeyEquivalent(Character(label.lowercased())), modifiers: [])
+            Text(model.profileName(for: url))
+                .font(.caption)
+                .foregroundStyle(active ? .primary : .secondary)
+                .lineLimit(1)
+                .truncationMode(.middle)
+                .frame(width: 220)
         }
     }
 }

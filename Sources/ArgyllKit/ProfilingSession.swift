@@ -27,6 +27,13 @@ public struct ProfilingOptions: Sendable {
     /// false leaves the finished .icc in the working directory without installing or
     /// assigning it (dispwin -I). Useful for test runs and for validation-only passes.
     public var installProfile: Bool = true
+    /// Provenance written into the ICC file. The description is what System Settings
+    /// shows in the Color profile menu; defaults to the profile name.
+    public var profileDescription: String? = nil
+    /// ICC device model tag (colprof -M), e.g. the display's name.
+    public var deviceModel: String? = nil
+    /// ICC copyright tag (colprof -C); a good place for the app and instrument.
+    public var copyright: String = "Made with ArgyllCMS"
 
     public struct Calibration: Sendable {
         /// nil keeps the native white.
@@ -108,7 +115,9 @@ public actor ProfilingSession {
 
         // -as: shaper + matrix. Recent macOS no longer reliably honours LUT-based
         // display profiles, and a matrix profile is what a well-behaved display needs anyway.
-        try await step(.colprof, ["-v", quality, "-as", "-D", base, "-C", "Profiled with ArgyllCMS", base])
+        var profArgs = ["-v", quality, "-as", "-D", options.profileDescription ?? base, "-C", options.copyright]
+        if let model = options.deviceModel { profArgs += ["-M", model] }
+        try await step(.colprof, profArgs + [base])
 
         // -I installs into ~/Library/ColorSync/Profiles and assigns it to the display.
         if options.installProfile {
