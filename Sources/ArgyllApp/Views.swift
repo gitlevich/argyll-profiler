@@ -458,18 +458,28 @@ struct CompareView: View {
             Text("Comparing profiles on \(model.compareDisplayName)")
                 .font(.title3.weight(.semibold))
 
-            HStack(alignment: .top, spacing: 14) {
-                column("A", selection: $model.compareA)
-                Button {
-                    model.toggleCompare()
-                } label: {
-                    Label("Switch", systemImage: "arrow.left.arrow.right")
+            Grid(horizontalSpacing: 12, verticalSpacing: 8) {
+                GridRow {
+                    profilePicker(selection: $model.compareA)
+                    Spacer().frame(width: 44)
+                    profilePicker(selection: $model.compareB)
                 }
-                .controlSize(.large)
-                .keyboardShortcut(.space, modifiers: [])
-                .padding(.top, 34)
-                column("B", selection: $model.compareB)
+                GridRow {
+                    showButton("A", url: model.compareA)
+                    Button {
+                        model.toggleCompare()
+                    } label: {
+                        Image(systemName: "arrow.left.arrow.right")
+                            .font(.body.weight(.semibold))
+                            .frame(width: 44, height: 26)
+                    }
+                    .buttonStyle(.bordered)
+                    .keyboardShortcut(.space, modifiers: [])
+                    .help("Switch the shown profile (space)")
+                    showButton("B", url: model.compareB)
+                }
             }
+            .padding(.horizontal, 2)
 
             ZStack {
                 if let image = model.renderedImage ?? model.referenceImage {
@@ -520,31 +530,31 @@ struct CompareView: View {
         .padding(24)
     }
 
-    /// Menu on top, its button right under it.
-    private func column(_ label: String, selection: Binding<URL?>) -> some View {
-        let active = model.activeProfile == selection.wrappedValue
-        return VStack(spacing: 8) {
-            Picker(label, selection: selection) {
-                ForEach(model.compareProfiles) { p in
-                    Text(RunModel.compactLabel(p))
-                        .tag(Optional(p.url))
-                }
+    private func profilePicker(selection: Binding<URL?>) -> some View {
+        Picker(selection: selection) {
+            ForEach(model.compareProfiles) { p in
+                Text(RunModel.compactLabel(p)).tag(Optional(p.url))
             }
-            .help(model.profileName(for: selection.wrappedValue))
-            Button {
-                model.activate(selection.wrappedValue)
-            } label: {
-                HStack(spacing: 6) {
-                    if active { Image(systemName: "checkmark.circle.fill").foregroundStyle(.green) }
-                    Text(active ? "Showing \(label)" : "Show \(label)").font(.headline)
-                }
-                .frame(maxWidth: .infinity)
+        } label: { EmptyView() }
+        .labelsHidden()
+        .help(model.profileName(for: selection.wrappedValue))
+        .frame(maxWidth: .infinity)
+    }
+
+    private func showButton(_ label: String, url: URL?) -> some View {
+        let active = model.activeProfile == url
+        return Button {
+            model.activate(url)
+        } label: {
+            HStack(spacing: 6) {
+                if active { Image(systemName: "checkmark.circle.fill").foregroundStyle(.green) }
+                Text(active ? "Showing \(label)" : "Show \(label)").font(.headline)
             }
-            .buttonStyle(.bordered)
-            .controlSize(.large)
-            .tint(active ? Color.accentColor : Color.secondary)
-            .keyboardShortcut(KeyEquivalent(Character(label.lowercased())), modifiers: [])
+            .frame(maxWidth: .infinity, minHeight: 28)
         }
+        .buttonStyle(.bordered)
+        .tint(active ? Color.accentColor : Color.secondary)
+        .keyboardShortcut(KeyEquivalent(Character(label.lowercased())), modifiers: [])
         .frame(maxWidth: .infinity)
     }
 }
