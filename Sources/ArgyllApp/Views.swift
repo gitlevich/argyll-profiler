@@ -420,9 +420,17 @@ struct CompareView: View {
             Text("Comparing profiles on \(model.compareDisplayName)")
                 .font(.title3.weight(.semibold))
 
-            HStack(spacing: 16) {
-                slot("A", selection: $model.compareA).frame(maxWidth: .infinity)
-                slot("B", selection: $model.compareB).frame(maxWidth: .infinity)
+            HStack(alignment: .top, spacing: 14) {
+                column("A", selection: $model.compareA)
+                Button {
+                    model.toggleCompare()
+                } label: {
+                    Label("Switch", systemImage: "arrow.left.arrow.right")
+                }
+                .controlSize(.large)
+                .keyboardShortcut(.space, modifiers: [])
+                .padding(.top, 34)
+                column("B", selection: $model.compareB)
             }
 
             ZStack {
@@ -436,7 +444,7 @@ struct CompareView: View {
                     RoundedRectangle(cornerRadius: 8).strokeBorder(.tint, lineWidth: 3)
                 }
             }
-            .frame(maxWidth: .infinity, minHeight: 220, maxHeight: 360)
+            .frame(maxWidth: .infinity, minHeight: 220, maxHeight: 380)
             .clipShape(RoundedRectangle(cornerRadius: 8))
             .dropDestination(for: URL.self) { urls, _ in
                 guard let url = urls.first else { return false }
@@ -450,22 +458,11 @@ struct CompareView: View {
                 Button("Choose…") { model.chooseReferenceImage() }.controlSize(.small)
                 Button("Built-in patches") { model.referenceImage = TestImage.make() }.controlSize(.small)
                 Spacer()
+                Text("Space switches · A and B keys select")
+                    .font(.caption).foregroundStyle(.secondary)
             }
 
-            HStack(alignment: .top, spacing: 12) {
-                sideButton("A", url: model.compareA)
-                Button {
-                    model.toggleCompare()
-                } label: {
-                    Label("Switch", systemImage: "arrow.left.arrow.right")
-                }
-                .controlSize(.large)
-                .keyboardShortcut(.space, modifiers: [])
-                .padding(.top, 2)
-                sideButton("B", url: model.compareB)
-            }
-
-            Text("The image is converted through the active profile, as Lightroom would. Space bar switches, A and B keys select. Whichever is active stays when you leave.")
+            Text("The image is converted through the active profile, the way Lightroom does it. Whichever is active stays when you leave.")
                 .font(.caption)
                 .foregroundStyle(.secondary)
 
@@ -481,40 +478,32 @@ struct CompareView: View {
         .padding(24)
     }
 
-    private func slot(_ label: String, selection: Binding<URL?>) -> some View {
-        Picker(label, selection: selection) {
-            ForEach(model.compareProfiles) { p in
-                Text(RunModel.compactLabel(p))
-                    .tag(Optional(p.url))
+    /// Menu on top, its button right under it.
+    private func column(_ label: String, selection: Binding<URL?>) -> some View {
+        let active = model.activeProfile == selection.wrappedValue
+        return VStack(spacing: 8) {
+            Picker(label, selection: selection) {
+                ForEach(model.compareProfiles) { p in
+                    Text(RunModel.compactLabel(p))
+                        .tag(Optional(p.url))
+                }
             }
-        }
-        .help(model.profileName(for: selection.wrappedValue))
-    }
-
-    private func sideButton(_ label: String, url: URL?) -> some View {
-        let active = model.activeProfile == url
-        return VStack(spacing: 6) {
+            .help(model.profileName(for: selection.wrappedValue))
             Button {
-                model.activate(url)
+                model.activate(selection.wrappedValue)
             } label: {
                 HStack(spacing: 6) {
                     if active { Image(systemName: "checkmark.circle.fill").foregroundStyle(.green) }
-                    Text(label).font(.title3.weight(.bold))
+                    Text(active ? "Showing \(label)" : "Show \(label)").font(.headline)
                 }
-                .frame(width: 200)
+                .frame(maxWidth: .infinity)
             }
             .buttonStyle(.bordered)
             .controlSize(.large)
             .tint(active ? Color.accentColor : Color.secondary)
             .keyboardShortcut(KeyEquivalent(Character(label.lowercased())), modifiers: [])
-            Text(model.compactLabel(for: url))
-                .font(.caption)
-                .foregroundStyle(active ? .primary : .secondary)
-                .lineLimit(1)
-                .truncationMode(.middle)
-                .frame(width: 220)
-                .help(model.profileName(for: url))
         }
+        .frame(maxWidth: .infinity)
     }
 }
 
