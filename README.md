@@ -67,7 +67,8 @@ it with the Developer ID certificate in your keychain, notarizes it, staples the
 and produces `.build/Argyll-Profiler-<version>.dmg`.
 
 On GitHub: push a tag `vX.Y` and `.github/workflows/release.yml` does the same on an
-Apple silicon runner and attaches the DMG to a GitHub Release. It needs these repository
+Apple silicon runner and attaches the DMG to a GitHub Release. Nothing runs on ordinary
+pushes; only tags use Actions minutes. It needs these repository
 secrets (Settings > Secrets and variables > Actions):
 
 - `MACOS_CERTIFICATE_P12` — your "Developer ID Application" certificate with its private
