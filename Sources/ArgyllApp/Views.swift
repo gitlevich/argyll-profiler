@@ -426,10 +426,11 @@ struct CompareView: View {
             }
 
             ZStack {
-                if let image = model.referenceImage {
+                if let image = model.renderedImage ?? model.referenceImage {
                     Image(nsImage: image)
                         .resizable()
                         .aspectRatio(contentMode: .fit)
+                        .id(model.activeProfile)
                 }
                 if dropTargeted {
                     RoundedRectangle(cornerRadius: 8).strokeBorder(.tint, lineWidth: 3)
@@ -464,7 +465,7 @@ struct CompareView: View {
                 sideButton("B", url: model.compareB)
             }
 
-            Text("Space bar switches, A and B keys select. Whichever is active stays when you leave.")
+            Text("The image is converted through the active profile, as Lightroom would. Space bar switches, A and B keys select. Whichever is active stays when you leave.")
                 .font(.caption)
                 .foregroundStyle(.secondary)
 

@@ -34,3 +34,18 @@ Fix: ASCII separators and "gamma" instead of "γ", with a final non-ASCII scrub;
 caption shows the file name and the full description as a tooltip; the i1d3 family is
 named "i1 DisplayPro" instead of Argyll's "i1 DisplayPro, ColorMunki Display".
 Test: `RunModelTests.testProfileDescriptionIsPlainASCII`.
+
+## 4. Compare showed no difference between profiles — fixed 2026-09-28
+
+Switching the display's assigned profile through ColorSync changed nothing on screen.
+Measured with the HL on a colour-managed grey patch: sRGB grey 0.5 read 63 cd/m² with
+the i1Pro 2 profile, with Generic RGB (gamma 1.8, should read ~45) and with the window
+tagged Generic RGB. On this macOS with the Studio Display the OS converts what apps draw
+to the panel's preset colorimetry and never consults the assigned ICC profile; the
+window's declared colour space is ignored too. The assigned profile only matters to apps
+that convert their own pixels (Lightroom, Photoshop).
+
+Fix: the Compare screen converts the reference image through the active profile itself
+(`ProfileRenderer`), the way Lightroom does, and shows the result re-tagged as sRGB.
+A/B now differ on screen by the profiles' real difference.
+Test: `RunModelTests.testProfileRendererConvertsThroughTheProfile`.

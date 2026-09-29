@@ -41,3 +41,26 @@ enum TestImage {
         return NSImage(cgImage: image, size: NSSize(width: width / 2, height: height / 2))
     }
 }
+
+
+/// Colour-manages an image the way Lightroom or Photoshop would: converts it from its
+/// own colour space into the given display profile, then hands the OS the converted
+/// pixels. On this macOS the OS ignores the assigned display profile for its own drawing,
+/// so this is the only way two profiles can be compared on screen.
+enum ProfileRenderer {
+    static func render(_ image: NSImage, through profileURL: URL?) -> NSImage {
+        guard let profileURL,
+              let data = try? Data(contentsOf: profileURL),
+              let target = CGColorSpace(iccData: data as CFData),
+              let source = image.cgImage(forProposedRect: nil, context: nil, hints: nil) else { return image }
+        let w = source.width, h = source.height
+        guard let ctx = CGContext(data: nil, width: w, height: h, bitsPerComponent: 8, bytesPerRow: 0,
+                                  space: target, bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue) else { return image }
+        ctx.draw(source, in: CGRect(x: 0, y: 0, width: w, height: h))      // CoreGraphics converts into the profile
+        guard let converted = ctx.makeImage(),
+              // Re-tag the converted pixels as sRGB: the OS treats what it receives as sRGB anyway,
+              // so tagging them honestly would make it convert them a second time.
+              let retagged = converted.copy(colorSpace: CGColorSpace(name: CGColorSpace.sRGB)!) else { return image }
+        return NSImage(cgImage: retagged, size: image.size)
+    }
+}

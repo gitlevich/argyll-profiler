@@ -69,7 +69,9 @@ final class RunModel: ObservableObject {
     @Published var compareA: URL?
     @Published var compareB: URL?
     @Published var activeProfile: URL?
-    @Published var referenceImage: NSImage?
+    @Published var referenceImage: NSImage? { didSet { rerender() } }
+    /// `referenceImage` converted through `activeProfile`, the image actually shown.
+    @Published var renderedImage: NSImage?
     @Published var compareDisplayName = ""
     private var compareDisplayID: CGDirectDisplayID?
     /// Whatever the display was using when the last run started.
@@ -374,7 +376,7 @@ final class RunModel: ObservableObject {
         let installedNew = summary.flatMap { s in compareProfiles.first { $0.url.lastPathComponent == s.profileURL.lastPathComponent }?.url }
         compareA = installedNew ?? activeProfile ?? factory
         compareB = previousProfileURL ?? compareProfiles.first { $0.url != compareA }?.url ?? factory
-        if referenceImage == nil { referenceImage = TestImage.make() }
+        if referenceImage == nil { referenceImage = TestImage.make() } else { rerender() }
         phase = .compare
         note("COMPARE active=\(activeProfile?.lastPathComponent ?? "factory") A=\(compareA?.lastPathComponent ?? "-") B=\(compareB?.lastPathComponent ?? "-")")
     }
@@ -389,6 +391,12 @@ final class RunModel: ObservableObject {
         } else {
             note("ACTIVATE FAILED \(url?.lastPathComponent ?? "factory")")
         }
+        rerender()
+    }
+
+    private func rerender() {
+        guard let image = referenceImage else { renderedImage = nil; return }
+        renderedImage = ProfileRenderer.render(image, through: activeProfile)
     }
 
     func toggleCompare() {

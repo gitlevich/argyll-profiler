@@ -110,6 +110,30 @@ final class RunModelTests: XCTestCase {
         XCTAssertEqual(label("Studio Display", factory: true), "Studio Display (Apple factory)")
     }
 
+    /// BUGS.md #4. The renderer must really convert through the profile: sRGB grey 0.5
+    /// through Apple's gamma-1.8 Generic RGB comes out as device 109, measured on the
+    /// panel as exactly that conversion.
+    func testProfileRendererConvertsThroughTheProfile() throws {
+        let generic = URL(fileURLWithPath: "/System/Library/ColorSync/Profiles/Generic RGB Profile.icc")
+        try XCTSkipUnless(FileManager.default.fileExists(atPath: generic.path))
+        let srgb = CGColorSpace(name: CGColorSpace.sRGB)!
+        let ctx = CGContext(data: nil, width: 8, height: 8, bitsPerComponent: 8, bytesPerRow: 0, space: srgb,
+                            bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue)!
+        ctx.setFillColor(CGColor(colorSpace: srgb, components: [0.5, 0.5, 0.5, 1])!)
+        ctx.fill(CGRect(x: 0, y: 0, width: 8, height: 8))
+        let source = NSImage(cgImage: ctx.makeImage()!, size: NSSize(width: 8, height: 8))
+
+        let rendered = ProfileRenderer.render(source, through: generic)
+        let cg = rendered.cgImage(forProposedRect: nil, context: nil, hints: nil)!
+        let data = cg.dataProvider!.data! as Data
+        XCTAssertEqual(Int(data[0]), 109, accuracy: 2)
+        XCTAssertEqual(cg.colorSpace?.name, CGColorSpace.sRGB, "re-tagged as sRGB so the OS does not convert twice")
+
+        let untouched = ProfileRenderer.render(source, through: nil)
+        let cg2 = untouched.cgImage(forProposedRect: nil, context: nil, hints: nil)!
+        XCTAssertEqual(Int((cg2.dataProvider!.data! as Data)[0]), 128, accuracy: 1)
+    }
+
     func testFailedRunStillDrainsEvents() async throws {
         let model = RunModel()
         var continuation: AsyncStream<(ProfilingSession.Stage, ArgyllEvent)>.Continuation!
