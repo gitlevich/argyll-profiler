@@ -51,7 +51,7 @@ final class RunModelTests: XCTestCase {
         model.instrumentPort = 1
         let date = Date(timeIntervalSince1970: 1_790_000_000)   // 2026-09-21 in UTC; formatter uses local time
         let name = model.suggestedProfileName(at: date)
-        XCTAssertTrue(name.hasPrefix("StudioDisplay_i1Pro2_ArgyllProfiler_2026-09-2"), name)
+        XCTAssertTrue(name.hasPrefix("StudioDisplay_i1Pro2_2026-09-2"), name)
         XCTAssertFalse(name.contains(" "))
         // The form follows the selection until the user types their own name.
         XCTAssertEqual(model.profileName, model.suggestedProfileName())
@@ -60,7 +60,8 @@ final class RunModelTests: XCTestCase {
         model.displayIndex = 2
         XCTAssertEqual(model.profileName, "MyOwnName")
         let description = model.profileDescription(at: date)
-        XCTAssertTrue(description.contains("Studio Display - i1 Pro 2 spectrophotometer - Argyll Profiler"), description)
+        XCTAssertTrue(description.hasPrefix("Studio Display, i1 Pro 2 spectrophotometer, 2026-09-2"), description)
+        XCTAssertTrue(description.hasSuffix("profile only, 175 patches)"), description)
         XCTAssertTrue(description.contains("profile only, 175 patches"), description)
     }
 
@@ -74,7 +75,7 @@ final class RunModelTests: XCTestCase {
         model.instrumentPort = 1
         let description = model.profileDescription()
         XCTAssertTrue(description.allSatisfy { $0.isASCII }, description)
-        XCTAssertTrue(description.hasPrefix("Studio Display - i1 DisplayPro family colorimeter - Argyll Profiler"), description)
+        XCTAssertTrue(description.hasPrefix("Studio Display, i1 DisplayPro family colorimeter, "), description)
         XCTAssertEqual(RunModel.instrumentName("hid1: (X-Rite i1 DisplayPro, ColorMunki Display)"), "i1 DisplayPro family")
     }
 

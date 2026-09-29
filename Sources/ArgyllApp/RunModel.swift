@@ -173,11 +173,11 @@ final class RunModel: ObservableObject {
         return kind == .unknown ? selectedInstrumentName : "\(selectedInstrumentName) \(kind.rawValue)"
     }
 
-    /// StudioDisplay_i1Pro2_ArgyllProfiler_2026-09-28_1830
+    /// StudioDisplay_i1Pro2_2026-09-28_1830
     func suggestedProfileName(at date: Date = Date()) -> String {
         let f = DateFormatter()
         f.dateFormat = "yyyy-MM-dd_HHmm"
-        return [Self.token(selectedDisplayName), Self.token(selectedInstrumentName), "ArgyllProfiler", f.string(from: date)]
+        return [Self.token(selectedDisplayName), Self.token(selectedInstrumentName), f.string(from: date)]
             .filter { !$0.isEmpty }.joined(separator: "_")
     }
 
@@ -196,7 +196,7 @@ final class RunModel: ObservableObject {
         let f = DateFormatter()
         f.dateFormat = "yyyy-MM-dd HH:mm"
         let mode = calibrate ? "calibrated \(whitePointKelvin == 0 ? "native" : "\(whitePointKelvin) K") gamma \(gamma)" : "profile only"
-        let text = "\(selectedDisplayName) - \(selectedInstrumentDescription) - Argyll Profiler \(Self.appVersion) - \(f.string(from: date)) - \(mode), \(patchCount) patches"
+        let text = "\(selectedDisplayName), \(selectedInstrumentDescription), \(f.string(from: date)) (Argyll Profiler \(Self.appVersion), \(mode), \(patchCount) patches)"
         return String(text.unicodeScalars.map { $0.isASCII ? Character($0) : "-" })
     }
 
