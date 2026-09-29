@@ -13,13 +13,16 @@ public struct ProfilingOptions: Sendable {
     public var quality: Character = "m"
     /// -H, the i1Pro 2 high-resolution spectral mode.
     public var hiRes: Bool = true
+    /// -N: reuse the instrument's last white-tile calibration if Argyll still considers
+    /// it valid, so a run can start with the instrument already on the display.
+    public var skipInstrumentCalibrationIfPossible: Bool = false
     /// nil profiles the display as it is. That is the right choice for a Studio Display
     /// sitting in an Apple reference preset: no gamma-table curves, just a description
     /// of what the display does. Set it to run dispcal first and embed vcgt curves.
     public var calibration: Calibration? = nil
     /// If set, dispread serves patches at http://localhost:PORT instead of drawing its
-    /// own window. Show that URL in a borderless full-screen WKWebView on the target
-    /// NSScreen and you own placement, warm-up and the "cover the sensor" overlay.
+    /// own window. Only useful with a patch renderer that draws in device RGB; a plain
+    /// web view is colour-managed and would corrupt the measurement.
     public var patchServerPort: Int? = nil
     /// false leaves the finished .icc in the working directory without installing or
     /// assigning it (dispwin -I). Useful for test runs and for validation-only passes.
@@ -82,7 +85,9 @@ public actor ProfilingSession {
         let display = "-d\(options.displayIndex)"
         let port = "-c\(options.instrumentPort)"
         let quality = "-q\(options.quality)"
-        let hiRes = options.hiRes ? ["-H"] : []
+        var measureFlags: [String] = []
+        if options.hiRes { measureFlags.append("-H") }
+        if options.skipInstrumentCalibrationIfPossible { measureFlags.append("-N") }
         // dispcal and dispread draw patches either on the chosen display or via the web server.
         let patchTarget = options.patchServerPort.map { "-dweb:\($0)" } ?? display
 
@@ -90,10 +95,10 @@ public actor ProfilingSession {
         // -e/-B: extra white/black patches; -g: grey-axis steps; -f: total patches.
         try await step(.targen, ["-v", "-d3", "-G", "-e4", "-B4", "-g32", "-f\(options.patchCount)", base])
 
-        var readArgs = ["-v"] + hiRes + [patchTarget, port]
+        var readArgs = ["-v"] + measureFlags + [patchTarget, port]
         if let cal = options.calibration {
             // -m skips the interactive monitor-control adjustment menu.
-            var calArgs = ["-v", "-m", patchTarget, port, quality] + hiRes + ["-g\(cal.gamma)"]
+            var calArgs = ["-v", "-m", patchTarget, port, quality] + measureFlags + ["-g\(cal.gamma)"]
             if let kelvin = cal.whitePointKelvin { calArgs.append("-t\(kelvin)") }
             try await step(.dispcal, calArgs + [base])
             // Measure through the new curves; colprof embeds them as vcgt.

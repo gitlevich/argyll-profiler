@@ -7,10 +7,13 @@ let package = Package(
     products: [
         .library(name: "ArgyllKit", targets: ["ArgyllKit"]),
         .executable(name: "argyllkit-cli", targets: ["argyllkit-cli"]),
+        .executable(name: "ArgyllApp", targets: ["ArgyllApp"]),
     ],
     targets: [
         .target(name: "ArgyllKit"),
         .executableTarget(name: "argyllkit-cli", dependencies: ["ArgyllKit"]),
+        .executableTarget(name: "ArgyllApp", dependencies: ["ArgyllKit"]),
         .testTarget(name: "ArgyllKitTests", dependencies: ["ArgyllKit"]),
+        .testTarget(name: "ArgyllAppTests", dependencies: ["ArgyllApp", "ArgyllKit"]),
     ]
 )
