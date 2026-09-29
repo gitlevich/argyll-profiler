@@ -1,83 +1,117 @@
-# ArgyllKit
+# Argyll Profiler
 
-The process layer for a native macOS front end to ArgyllCMS. Three files:
+A native macOS app that profiles your display with ArgyllCMS and a real instrument, so
+Lightroom, Photoshop and other colour-managed apps show your photographs the way they
+actually are. It bundles ArgyllCMS, drives it for you, and turns the whole thing into a
+few clicks and two prompts: "put the instrument on its tile", "put it on the screen".
 
-`PTYProcess.swift` spawns a tool on a pseudo-terminal via `posix_spawn` + `openpty`. A pty, not a pipe, because libc line-buffers stdout only for a terminal (otherwise progress arrives in 4 KB bursts), and because Argyll reads its "hit any key" answers in raw mode, which needs a tty.
+Download the latest `Argyll-Profiler-x.y.dmg` from
+[Releases](https://github.com/gitlevich/argyll-profiler/releases), open it, drag the app
+to Applications. It is signed and notarized.
 
-`ArgyllRunner.swift` runs one tool and parses its output into `ArgyllEvent`s: `.line`, `.progress(done:total:)`, `.prompt(.placeOnWhiteTile | .placeOnDisplay | .other)`, `.error`, `.exited`. Prompts have no line terminator, so the parser matches the unterminated tail on every chunk. `Argyll.displays()` and `Argyll.instruments()` parse `dispwin -?` and `spotread -?` for the display and instrument lists.
+## What you need
 
-`ProfilingSession.swift` is an actor running targen → (dispcal) → dispread → colprof → dispwin in a working directory, forwarding `(Stage, ArgyllEvent)` and routing `answerPrompt()` to whichever tool is waiting.
+- macOS 13 or later on Apple silicon.
+- An instrument Argyll supports. Tested with the X-Rite **i1 Pro 2** spectrophotometer and
+  the **Calibrite Display Plus HL** colorimeter, which Argyll sees as an "i1 DisplayPro
+  family" device together with the ColorMunki Display, i1 Display Pro / Studio and the
+  Calibrite Display SL and Pro HL. Other Argyll-supported instruments should work but
+  haven't been tried.
+- Nothing else. ArgyllCMS is inside the app.
 
-## Prerequisites
+## Two words that are easy to confuse
 
-`brew install argyll-cms`. Do not sandbox the app: Argyll talks to the i1Pro 2 through its own libusb and needs raw USB access.
+**Preset** is the display's own mode, set in System Settings > Displays: Apple XDR
+Display, Apple Display, Photography (P3-D65), and so on. A preset changes what the panel
+emits: its white point, its brightness range, its gamut. The app never touches it.
 
-## Usage
+**Profile** is a file (an ICC profile) that describes what the display does, so that
+colour-managed apps can convert each image correctly for it. Making one does not change
+the display. On Apple displays, macOS uses the Preset for everything it draws itself and
+ignores the profile; the profile matters for apps that do their own colour management,
+Lightroom Classic and Photoshop above all. That is why a bad profile shows up as a colour
+cast in Lightroom and nowhere else.
 
-```swift
-let displays = try await Argyll.displays()       // pick the Studio Display's index
-let instruments = try await Argyll.instruments() // the i1Pro 2's port
+Apple hides the "Color profile" menu for its own displays. To see or change the assigned
+profile use ColorSync Utility (Applications > Utilities > Devices > Displays) or the
+app's Compare screen.
 
-var options = ProfilingOptions(displayIndex: 2, instrumentPort: 1, profileName: "StudioDisplay_2026-09-28")
-options.patchCount = 400
-options.calibration = nil          // profile as-is; the display stays in its Apple preset
-options.patchServerPort = 8080     // optional: render patches yourself in a WKWebView
+## Profiling a display
 
-let session = ProfilingSession(options: options, directory: workDir)
+1. In System Settings > Displays, put the display on the Preset you use every day, turn
+   off "Automatically adjust brightness" and True Tone, and set the brightness to the
+   level you edit at (120–300 cd/m² is the usual range; 500 is not). Don't change the
+   preset again afterwards: a different preset is a different display to the profile.
+2. Plug in the instrument and open the app. It lists your displays and instruments, tells
+   you which instrument is the spectrophotometer and which the colorimeter, and lets you
+   give an instrument a name of your own ("Call it").
+3. Leave **Profile only** selected. Choose the patch count (175 is fine; 400 for the
+   thorough version) and Quality. On a laptop with a large instrument that slides down
+   the tilted screen, set the patch window to Bottom and Huge.
+4. Press Start and follow the two cards: the spectrophotometer wants its white tile
+   first, then the patch window; a colorimeter goes straight to the window. Measuring
+   takes a few minutes.
+5. The results screen shows the measured white point, luminance and how well the profile
+   fits. With "Install the profile when done" on, the new profile is already assigned to
+   the display. **Relaunch Lightroom or Photoshop**; they read the display profile when
+   they start.
 
-Task {
-    for await (stage, event) in session.events {
-        switch event {
-        case .prompt(.placeOnWhiteTile):
-            // Sheet: "Put the i1Pro 2 on its white tile", button calls session.answerPrompt()
-        case .prompt(.placeOnDisplay):
-            // Sheet: "Now place it on the patch window", same button
-        case .progress(let done, let total):
-            // update a ProgressView; stage tells you which step you're in
-        case .error(let message):
-            // surface it; the session throws at the end of the stage anyway
-        default:
-            break
-        }
-    }
-}
+Profiles are named so you can tell them apart later, on disk and in every menu:
+`StudioDisplay_i1Pro2_2026-09-28_1811.icc`, described as "Studio Display, i1 Pro 2
+spectrophotometer, 2026-09-28 18:11 (Argyll Profiler 0.3, profile only, 175 patches)".
 
-let profile = try await session.run()
-```
+## Colorimeter or spectrophotometer, and the correction matrix
 
-With `patchServerPort` set, open a borderless `NSWindow` at level `.screenSaver` covering the target `NSScreen`, put a `WKWebView` in it pointing at `http://localhost:8080`, and close it when `dispread` exits. Without it, Argyll draws its own patch window on display `displayIndex`.
+A spectrophotometer (i1 Pro 2) is the reference: it reads white point and saturated
+colours correctly on any display, but it is slow, needs its white tile, and is noisy in
+dark tones. A colorimeter (Display Plus HL) is fast, quiet in the dark tones and needs no
+tile, but it reads a display accurately only through a correction for that panel's
+backlight; without one, saturated colours are off.
 
-## Notes
+If you own both, make a **correction matrix** once per display: select the colorimeter,
+press "Make matrix…", choose the backlight type (Apple displays are "LCD, PFS phosphor,
+IPS"), and follow the cards, colorimeter first, then the spectrophotometer on the same
+spot. The app stores the matrix and applies it automatically whenever that colorimeter is
+used on that display; the setup screen says so, and profiles made with it say
+"matrix-corrected" in their description. From then on, profile with the colorimeter.
 
-The i1Pro 2 self-calibrates on its white tile at the start of every tool that measures, so expect `.placeOnWhiteTile` from `dispcal`, `dispread` and `spotread` each. It may ask again mid-run after a long session; the same handler covers it.
+## Comparing profiles
 
-Argyll also supports `ARGYLL_NOT_INTERACTIVE=1`, which makes prompts read a full line instead of a raw key. That does not remove the need for the pty (buffering), so the runner uses raw keys. If you ever see a prompt the parser classifies as `.other`, add its wording to the patterns in `ArgyllOutputParser`.
+"Compare profiles…" shows a reference image, the built-in patches or any photo you drop
+on it, converted through profile A or profile B exactly as Lightroom would convert it.
+The space bar switches, the A and B keys select, and the highlighted letter tells you
+which is showing. "Numbers" prints the grey ramp through both profiles as device values
+and flags any tint, which settles "is that a cast or my eyes?" with arithmetic.
 
-`colprof -as` builds a shaper/matrix profile. Keep it that way on macOS 14+: LUT-based display profiles are the ones ColorSync stopped honouring.
+Whichever profile is showing when you press Done stays assigned to the display. "Apple
+factory profile" puts Apple's own profile back ("Color LCD" for a built-in display,
+"Studio Display" for the external one).
 
-## Before trusting the parser
+## Calibrate, then profile
 
-Run `spotread -?` and one real `dispread` in Terminal with the instrument attached and check the exact wording of the tile and display prompts against the regexes in `ArgyllOutputParser`. The `.other` case catches anything that doesn't match without breaking the flow.
+The other mode. Argyll works out an adjustment that pushes the display toward a chosen
+white point and gamma, then measures the result. It exists for displays that have no
+preset for the white you want. On Apple displays prefer a custom Preset (System Settings
+> Displays > Preset > Customize Presets…): it lives in the display itself and survives
+reconnects, which the software adjustment on recent macOS does not. If a display measures
+a few hundred kelvin off its nominal white, that custom preset with a corrected white
+point is the durable fix; the app's white point readout tells you how far off it is.
 
+## Where things live
 
-## Releasing
+- Installed profiles: `~/Library/ColorSync/Profiles/`
+- Measurements and the profile of each run: `~/Library/Application Support/ArgyllApp/Runs/<profile name>/`
+- Correction matrices: `~/Library/Application Support/ArgyllApp/Corrections/`
 
-Locally: `Scripts/release.sh` builds the app with ArgyllCMS bundled from Homebrew, signs
-it with the Developer ID certificate in your keychain, notarizes it, staples the ticket
-and produces `.build/Argyll-Profiler-<version>.dmg`.
+## Building and releasing
 
-On GitHub: push a tag `vX.Y` and `.github/workflows/release.yml` does the same on an
-Apple silicon runner and attaches the DMG to a GitHub Release. Nothing runs on ordinary
-pushes; only tags use Actions minutes. It needs these repository
-secrets (Settings > Secrets and variables > Actions):
+`swift build`, `swift test`, and `Scripts/make-app.sh --install` bundles ArgyllCMS from
+Homebrew (`brew install argyll-cms`), signs with your Developer ID if you have one, and
+copies the app to /Applications. Releases are built by GitHub Actions on `v*` tags:
+see `docs/ENGINE.md` for the engine and the release secrets, `BUGS.md` for the bugs found
+along the way, and `BACKLOG.md` for what's next.
 
-- `MACOS_CERTIFICATE_P12` — your "Developer ID Application" certificate with its private
-  key, exported from Keychain Access as .p12 and base64-encoded: `base64 -i cert.p12 | pbcopy`
-- `MACOS_CERTIFICATE_PASSWORD` — the password you set when exporting the .p12
-- `KEYCHAIN_PASSWORD` — any string; protects the temporary keychain on the runner
-- `APPLE_ID` — the Apple ID of the developer account
-- `APPLE_APP_PASSWORD` — an app-specific password for that account
-- `APPLE_TEAM_ID` — the ten-character team ID on the certificate
+## License
 
-The version in `Resources/Info.plist` is overwritten from the tag, so tag from `main` and
-don't bump it by hand.
+MIT for this app; see `LICENSE`. ArgyllCMS is bundled unmodified under its own AGPL-3.0
+license and runs as separate processes.
