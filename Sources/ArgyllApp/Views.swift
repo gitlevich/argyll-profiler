@@ -24,6 +24,7 @@ struct RootView: View {
 
 struct SetupView: View {
     @EnvironmentObject var model: RunModel
+    @State private var showNickname = false
 
     var body: some View {
         VStack(spacing: 0) {
@@ -34,10 +35,17 @@ struct SetupView: View {
                             Text(RunModel.shortName(d.name)).tag(d.index)
                         }
                     }
-                    Picker("Instrument", selection: $model.instrumentPort) {
-                        ForEach(model.instruments, id: \.port) { i in
-                            Text(RunModel.instrumentName(i.name)).tag(i.port)
+                    HStack {
+                        Picker("Instrument", selection: $model.instrumentPort) {
+                            ForEach(model.instruments, id: \.port) { i in
+                                Text(model.instrumentLabel(i)).tag(i.port)
+                            }
                         }
+                        Button("Name…") { showNickname = true }
+                            .disabled(model.selectedInstrument == nil)
+                            .popover(isPresented: $showNickname) {
+                                NicknameEditor(initial: model.selectedInstrumentName) { model.setNickname($0); showNickname = false }
+                            }
                     }
                     HStack {
                         if let error = model.discoveryError {
@@ -116,6 +124,29 @@ struct SetupView: View {
         model.calibrate
             ? "Calibration writes gamma-table curves into the profile."
             : "The display is measured as it is. Set it to its Apple default profile first."
+    }
+}
+
+struct NicknameEditor: View {
+    let initial: String
+    let commit: (String) -> Void
+    @State private var text = ""
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text("What is this instrument called?").font(.headline)
+            Text("Argyll can't tell the i1 DisplayPro family apart; the name you give is used in the app and in the profile's provenance.")
+                .font(.caption).foregroundStyle(.secondary).frame(width: 300)
+            TextField("e.g. Calibrite Display Plus HL", text: $text)
+                .textFieldStyle(.roundedBorder)
+                .onSubmit { commit(text) }
+            HStack {
+                Spacer()
+                Button("Use") { commit(text) }.keyboardShortcut(.defaultAction)
+            }
+        }
+        .padding(16)
+        .onAppear { text = initial }
     }
 }
 

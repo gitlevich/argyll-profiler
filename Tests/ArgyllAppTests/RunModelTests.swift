@@ -60,7 +60,7 @@ final class RunModelTests: XCTestCase {
         model.displayIndex = 2
         XCTAssertEqual(model.profileName, "MyOwnName")
         let description = model.profileDescription(at: date)
-        XCTAssertTrue(description.contains("Studio Display - i1 Pro 2 - Argyll Profiler"), description)
+        XCTAssertTrue(description.contains("Studio Display - i1 Pro 2 spectrophotometer - Argyll Profiler"), description)
         XCTAssertTrue(description.contains("profile only, 175 patches"), description)
     }
 
@@ -74,8 +74,25 @@ final class RunModelTests: XCTestCase {
         model.instrumentPort = 1
         let description = model.profileDescription()
         XCTAssertTrue(description.allSatisfy { $0.isASCII }, description)
-        XCTAssertTrue(description.hasPrefix("Studio Display - i1 DisplayPro - Argyll Profiler"), description)
-        XCTAssertEqual(RunModel.instrumentName("hid1: (X-Rite i1 DisplayPro, ColorMunki Display)"), "i1 DisplayPro")
+        XCTAssertTrue(description.hasPrefix("Studio Display - i1 DisplayPro family colorimeter - Argyll Profiler"), description)
+        XCTAssertEqual(RunModel.instrumentName("hid1: (X-Rite i1 DisplayPro, ColorMunki Display)"), "i1 DisplayPro family")
+    }
+
+    func testInstrumentKindsAndNicknames() {
+        XCTAssertEqual(RunModel.instrumentKind("usb1: (X-Rite i1 Pro 2)"), .spectrophotometer)
+        XCTAssertEqual(RunModel.instrumentKind("hid1: (X-Rite i1 DisplayPro, ColorMunki Display)"), .colorimeter)
+        XCTAssertEqual(RunModel.instrumentKind("/dev/cu.Bluetooth-Incoming-Port"), .unknown)
+        let model = RunModel()
+        let hl = Argyll.Instrument(port: 1, name: "hid1: (X-Rite i1 DisplayPro, ColorMunki Display)")
+        model.instruments = [hl]
+        model.instrumentPort = 1
+        XCTAssertEqual(model.instrumentLabel(hl), "Colorimeter: i1 DisplayPro family")
+        model.setNickname("Calibrite Display Plus HL")
+        XCTAssertEqual(model.instrumentLabel(hl), "Colorimeter: Calibrite Display Plus HL")
+        XCTAssertTrue(model.profileDescription().contains("Calibrite Display Plus HL colorimeter"), model.profileDescription())
+        XCTAssertTrue(model.suggestedProfileName().contains("CalibriteDisplayPlusHL"), model.suggestedProfileName())
+        model.setNickname("")
+        XCTAssertEqual(model.instrumentLabel(hl), "Colorimeter: i1 DisplayPro family")
     }
 
     func testFailedRunStillDrainsEvents() async throws {

@@ -80,6 +80,7 @@ final class RunModel: ObservableObject {
     private var controlPath: String?
     private var logFile: FileHandle?
     private var nameIsCustom = false
+    private var displayPreset = false
 
     private static let luminanceRegex = try! Regex("Display Luminance = ([0-9.]+)")
     private static let whiteRegex = try! Regex("White point XYZ = ([0-9.]+) ([0-9.]+) ([0-9.]+)")
@@ -103,8 +104,52 @@ final class RunModel: ObservableObject {
             s = String(s[s.index(after: open)..<close])
         }
         s = s.replacingOccurrences(of: "X-Rite ", with: "").trimmingCharacters(in: .whitespaces)
-        if s.hasPrefix("i1 DisplayPro") { return "i1 DisplayPro" }
+        if s.hasPrefix("i1 DisplayPro") { return "i1 DisplayPro family" }
         return s
+    }
+
+    enum InstrumentKind: String { case spectrophotometer, colorimeter, unknown }
+
+    /// X-Rite's names hide which is which: "i1 Pro" is the spectrophotometer, "i1 DisplayPro" the colorimeter.
+    static func instrumentKind(_ argyllName: String) -> InstrumentKind {
+        let n = argyllName.lowercased()
+        if n.contains("displaypro") || n.contains("colormunki display") || n.contains("spyder")
+            || n.contains("huey") || n.contains("dtp92") || n.contains("dtp94") || n.contains("smile")
+            || n.contains("i1 display") || n.contains("k-10") || n.contains("chroma") {
+            return .colorimeter
+        }
+        if n.contains("i1 pro") || n.contains("i1pro") || n.contains("colormunki") || n.contains("spectrolino")
+            || n.contains("dtp41") || n.contains("dtp20") || n.contains("dtp22") || n.contains("dtp51")
+            || n.contains("i1 monitor") || n.contains("spectro") {
+            return .spectrophotometer
+        }
+        return .unknown
+    }
+
+    /// User-given names for instruments Argyll can't tell apart, keyed by Argyll's name.
+    @Published var instrumentNicknames: [String: String] = UserDefaults.standard.dictionary(forKey: "instrumentNicknames") as? [String: String] ?? [:] {
+        didSet {
+            UserDefaults.standard.set(instrumentNicknames, forKey: "instrumentNicknames")
+            refreshSuggestedName()
+        }
+    }
+
+    /// "Colorimeter: Calibrite Display Plus HL" or "Spectrophotometer: i1 Pro 2", for pickers and prompts.
+    func instrumentLabel(_ instrument: Argyll.Instrument) -> String {
+        let name = instrumentNicknames[instrument.name] ?? Self.instrumentName(instrument.name)
+        switch Self.instrumentKind(instrument.name) {
+        case .spectrophotometer: return "Spectrophotometer: \(name)"
+        case .colorimeter: return "Colorimeter: \(name)"
+        case .unknown: return name
+        }
+    }
+
+    var selectedInstrument: Argyll.Instrument? { instruments.first { $0.port == instrumentPort } }
+
+    func setNickname(_ nickname: String) {
+        guard let argyllName = selectedInstrument?.name else { return }
+        let trimmed = nickname.trimmingCharacters(in: .whitespaces)
+        if trimmed.isEmpty { instrumentNicknames.removeValue(forKey: argyllName) } else { instrumentNicknames[argyllName] = trimmed }
     }
 
     private static func token(_ s: String) -> String {
@@ -115,8 +160,17 @@ final class RunModel: ObservableObject {
         displays.first { $0.index == displayIndex }.map { Self.shortName($0.name) } ?? "display \(displayIndex)"
     }
 
+    /// Nickname if the user gave one, else the cleaned-up Argyll name.
     var selectedInstrumentName: String {
-        instruments.first { $0.port == instrumentPort }.map { Self.instrumentName($0.name) } ?? "instrument"
+        guard let i = selectedInstrument else { return "instrument" }
+        return instrumentNicknames[i.name] ?? Self.instrumentName(i.name)
+    }
+
+    /// Name plus kind, for the provenance line: "Calibrite Display Plus HL colorimeter".
+    var selectedInstrumentDescription: String {
+        guard let i = selectedInstrument else { return "instrument" }
+        let kind = Self.instrumentKind(i.name)
+        return kind == .unknown ? selectedInstrumentName : "\(selectedInstrumentName) \(kind.rawValue)"
     }
 
     /// StudioDisplay_i1Pro2_ArgyllProfiler_2026-09-28_1830
@@ -142,7 +196,7 @@ final class RunModel: ObservableObject {
         let f = DateFormatter()
         f.dateFormat = "yyyy-MM-dd HH:mm"
         let mode = calibrate ? "calibrated \(whitePointKelvin == 0 ? "native" : "\(whitePointKelvin) K") gamma \(gamma)" : "profile only"
-        let text = "\(selectedDisplayName) - \(selectedInstrumentName) - Argyll Profiler \(Self.appVersion) - \(f.string(from: date)) - \(mode), \(patchCount) patches"
+        let text = "\(selectedDisplayName) - \(selectedInstrumentDescription) - Argyll Profiler \(Self.appVersion) - \(f.string(from: date)) - \(mode), \(patchCount) patches"
         return String(text.unicodeScalars.map { $0.isASCII ? Character($0) : "-" })
     }
 
@@ -170,7 +224,7 @@ final class RunModel: ObservableObject {
             FileManager.default.createFile(atPath: path, contents: nil)
             logFile = FileHandle(forWritingAtPath: path)
         }
-        if let d = value("--display").flatMap(Int.init) { displayIndex = d }
+        if let d = value("--display").flatMap(Int.init) { displayIndex = d; displayPreset = true }
         if let p = value("--patches").flatMap(Int.init) { patchCount = p }
         if let n = value("--name") { profileName = n; nameIsCustom = true }
         if arguments.contains("--no-install") { installProfile = false }
@@ -192,10 +246,12 @@ final class RunModel: ObservableObject {
         discovering = true
         defer { discovering = false }
         do {
+            let firstDiscovery = displays.isEmpty && !displayPreset
             displays = try await Argyll.displays()
             instruments = try await Argyll.instruments()
             discoveryError = nil
-            if !displays.contains(where: { $0.index == displayIndex }) {
+            // First time through, prefer an external display: that is what people profile.
+            if firstDiscovery || !displays.contains(where: { $0.index == displayIndex }) {
                 displayIndex = displays.first { !$0.name.localizedCaseInsensitiveContains("built-in") }?.index
                     ?? displays.first?.index ?? 1
             }
@@ -221,7 +277,7 @@ final class RunModel: ObservableObject {
         options.skipInstrumentCalibrationIfPossible = skipInstrumentCalibration
         options.profileDescription = profileDescription()
         options.deviceModel = selectedDisplayName
-        options.copyright = "Made with Argyll Profiler \(Self.appVersion) and ArgyllCMS, measured with \(selectedInstrumentName)"
+        options.copyright = "Made with Argyll Profiler \(Self.appVersion) and ArgyllCMS, measured with \(selectedInstrumentDescription)"
         if calibrate {
             options.calibration = ProfilingOptions.Calibration(
                 whitePointKelvin: whitePointKelvin == 0 ? nil : whitePointKelvin,
