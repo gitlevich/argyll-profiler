@@ -4,6 +4,7 @@ import ArgyllKit
 // argyllkit-cli list
 // argyllkit-cli profile --display N --name NAME [--port N] [--patches N] [--quality l|m|h]
 //                       [--web PORT] [--calibrate] [--no-install] [--dir PATH] [--control PATH]
+// argyllkit-cli run [--control PATH] -- TOOL ARGS…      (any Argyll tool, same prompt handling)
 //
 // --control PATH: instead of waiting for Return at a prompt, wait until PATH exists,
 // then delete it and continue. Lets the run be driven from another process.
@@ -11,7 +12,7 @@ import ArgyllKit
 setlinebuf(stdout)
 
 func usage() -> Never {
-    print("usage: argyllkit-cli list | profile --display N --name NAME [--port N] [--patches N] [--quality l|m|h] [--web PORT] [--calibrate] [--no-install] [--dir PATH] [--control PATH]")
+    print("usage: argyllkit-cli list | profile --display N --name NAME [--port N] [--patches N] [--quality l|m|h] [--web PORT] [--calibrate] [--no-install] [--dir PATH] [--control PATH] | run [--control PATH] -- TOOL ARGS…")
     exit(2)
 }
 
@@ -31,6 +32,24 @@ func waitForGo(_ control: String?) async {
         try? await Task.sleep(nanoseconds: 500_000_000)
     }
     try? FileManager.default.removeItem(atPath: control)
+}
+
+func report(_ stage: String, _ event: ArgyllEvent, control: String?, answer: () async -> Void) async {
+    switch event {
+    case .line(let line):
+        print("[\(stage)] \(line)")
+    case .progress(let done, let total):
+        print("[\(stage)] PROGRESS \(done)/\(total)")
+    case .prompt(let prompt):
+        print("[\(stage)] PROMPT \(prompt)")
+        await waitForGo(control)
+        await answer()
+        print("[\(stage)] answered")
+    case .error(let message):
+        print("[\(stage)] ERROR \(message)")
+    case .exited(let code):
+        print("[\(stage)] EXIT \(code)")
+    }
 }
 
 var args = Array(CommandLine.arguments.dropFirst())
@@ -56,30 +75,28 @@ do {
         if let w = value("--web", in: args).flatMap(Int.init) { options.patchServerPort = w }
         if args.contains("--calibrate") { options.calibration = ProfilingOptions.Calibration() }
         if args.contains("--no-install") { options.installProfile = false }
+        if args.contains("--skip-cal") { options.skipInstrumentCalibrationIfPossible = true }
         let control = value("--control", in: args)
         let dir = URL(fileURLWithPath: value("--dir", in: args) ?? FileManager.default.currentDirectoryPath)
 
         let session = ProfilingSession(options: options, directory: dir)
         let run = Task { try await session.run() }
         for await (stage, event) in session.events {
-            switch event {
-            case .line(let line):
-                print("[\(stage)] \(line)")
-            case .progress(let done, let total):
-                print("[\(stage)] PROGRESS \(done)/\(total)")
-            case .prompt(let prompt):
-                print("[\(stage)] PROMPT \(prompt)")
-                await waitForGo(control)
-                await session.answerPrompt()
-                print("[\(stage)] answered")
-            case .error(let message):
-                print("[\(stage)] ERROR \(message)")
-            case .exited(let code):
-                print("[\(stage)] EXIT \(code)")
-            }
+            await report(stage.rawValue, event, control: control) { await session.answerPrompt() }
         }
         let url = try await run.value
         print("DONE \(url.path)")
+
+    case "run":
+        guard let sep = args.firstIndex(of: "--"), sep + 1 < args.count else { usage() }
+        let control = value("--control", in: Array(args[..<sep]))
+        let tool = args[sep + 1]
+        let toolArgs = Array(args[(sep + 2)...])
+        let runner = try ArgyllRunner(tool: tool, arguments: toolArgs,
+                                      workingDirectory: FileManager.default.currentDirectoryPath)
+        for await event in runner.events {
+            await report(tool, event, control: control) { runner.answerPrompt() }
+        }
 
     default:
         usage()

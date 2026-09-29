@@ -142,8 +142,15 @@ public final class ArgyllRunner {
 public enum Argyll {
     public enum Failure: Error { case toolNotFound(String) }
 
-    /// Homebrew (Apple silicon, Intel) and MacPorts. Prepend a user-chosen directory if you expose one.
-    public static var searchPaths = ["/opt/homebrew/bin", "/usr/local/bin", "/opt/local/bin"]
+    /// The app bundle's own copy first (Contents/Helpers), then Homebrew (Apple silicon,
+    /// Intel) and MacPorts. Prepend a user-chosen directory if you expose one.
+    public static var searchPaths: [String] = [
+        Bundle.main.bundlePath + "/Contents/Helpers",
+        "/opt/homebrew/bin", "/usr/local/bin", "/opt/local/bin",
+    ]
+
+    /// Where the tools actually come from, for an About box or a diagnostics line.
+    public static var location: String? { try? path(for: "dispread") }
 
     public static func path(for tool: String) throws -> String {
         for dir in searchPaths {

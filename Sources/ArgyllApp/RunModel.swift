@@ -140,7 +140,7 @@ final class RunModel: ObservableObject {
                 instrumentPort = instruments.first { $0.name.localizedCaseInsensitiveContains("i1") }?.port
                     ?? instruments.first?.port ?? 1
             }
-            note("DISCOVERED displays=\(displays.count) instruments=\(instruments.count)")
+            note("DISCOVERED displays=\(displays.count) instruments=\(instruments.count) argyll=\(Argyll.location ?? "not found")")
         } catch {
             discoveryError = "\(error)"
             note("DISCOVERY FAILED \(error)")

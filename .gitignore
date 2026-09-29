@@ -1,4 +1,5 @@
 .build/
 test-run/
+Resources/AppIcon.iconset/
 *.xcodeproj/xcuserdata/
 .DS_Store
