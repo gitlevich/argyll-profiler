@@ -92,14 +92,18 @@ struct ArgyllOutputParser {
         if let m = line.firstMatch(of: Self.error) {
             events.append(.error(String(m[1].substring ?? "")))
         }
-        if line.contains(Self.menu) {
+        if line.contains(Self.menu) || line.contains(Self.selector) {
             events.append(.prompt(.other(line.trimmingCharacters(in: .whitespaces))))
         }
         return events
     }
 
+    private static let selector = try! Regex("(Select device|Select_device|choice) \\d+ - \\d+:|Select device \\d+ - \\d+:").ignoresCase()
+
     private func promptIn(_ lines: [String]) -> ArgyllPrompt? {
         let text = lines.map { $0.trimmingCharacters(in: .whitespaces) }.joined(separator: " ")
+        // A device selector ("Select device 1 - 4:") is a prompt even without the key phrase.
+        if let last = lines.last, last.contains(Self.selector) { return .other(last.trimmingCharacters(in: .whitespaces)) }
         guard text.contains(Self.keyPhrase) else { return nil }
         if text.contains(Self.tile) { return .placeOnWhiteTile }
         if text.contains(Self.display) { return .placeOnDisplay }

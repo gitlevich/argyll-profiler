@@ -61,6 +61,7 @@ public actor CorrectionSession {
     private static let fit = try! Regex("Fit error is avg ([0-9.]+), max ([0-9.]+)")
     private static let menuHeader = try! Regex("Press 1 \\.\\. (\\d+):")
     private static let optionLine = try! Regex("^\\s*(\\d+)\\) ")
+    private static let selectDevice = try! Regex("Select device \\d+ - \\d+:")
 
     /// Argyll discards typed-ahead input just before it reads a key, so a key must arrive only
     /// after the prompt has fully printed. A short delay is the robust way to guarantee that.
@@ -123,9 +124,9 @@ public actor CorrectionSession {
                 continuation.yield(.progress(done: done, total: total))
             case .prompt(let prompt):
                 if case .other(let text) = prompt, let m = text.firstMatch(of: Self.menuHeader) {
-                    menuLastOption = Int(m[1].substring ?? "")          // answer once "N) …" has printed
-                } else if case .other(let text) = prompt, text.contains("Select device") {
-                    await sendNextKey(runner)
+                    menuLastOption = Int(m[1].substring ?? "")          // menu: answer once "N) …" has printed
+                } else if case .other(let text) = prompt, text.contains(Self.selectDevice) {
+                    await sendNextKey(runner)                            // device list: answer now
                 } else {
                     continuation.yield(.prompt(prompt))
                 }

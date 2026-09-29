@@ -60,3 +60,16 @@ the nickname, the matrix was no longer found either.
 Fix: key nicknames by the instrument model name; old port-keyed entries are retired on
 the next save.
 Test: `RunModelTests.testInstrumentKindsAndNicknames` (replugged-name assertion).
+
+## 6. Correction flow hung at "Select device 1 - 4:" — fixed 2026-09-29
+
+The in-app matrix flow (and the CLI) stalled after choosing "select an instrument":
+ccxxmake's "Select device N - M:" prompt was never recognised, so no port number was
+sent. It ends in "N - M:" rather than the usual "hit any key" phrase, and depending on
+how the pty chunked the bytes it arrived either as a complete line or as an unterminated
+tail; the parser checked only one path.
+
+Fix: recognise the device-selector regex in both `classify` (line path) and the tail
+path. Also: Cancel now terminates ccxxmake (its menu ignores Escape), and ccxxmake is
+bundled with the app.
+Test: `ArgyllOutputParserTests.testDeviceSelectPromptAcrossChunkSplits`.

@@ -119,6 +119,17 @@ final class ArgyllOutputParserTests: XCTestCase {
         XCTAssertTrue(d.contains("Select device 1 - 2:"), d)
     }
 
+    func testDeviceSelectPromptAcrossChunkSplits() {
+        // ccxxmake's device list then "Select device 1 - 4:", which must surface as a prompt
+        // whether it lands as a complete line or as an unterminated tail.
+        let block = "    1 = 'hid1: (X-Rite i1 DisplayPro, ColorMunki Display)'\n    2 = 'usb17: (X-Rite i1 Pro 2)'\nSelect device 1 - 4: "
+        for size in [1, 4, 13, 4096] {
+            let e = events(from: [block], chunkSize: size)
+            let sel = prompts(e).contains { if case .other(let t) = $0 { return t.contains("Select device 1 - 4:") } else { return false } }
+            XCTAssertTrue(sel, "chunk size \(size): \(prompts(e))")
+        }
+    }
+
     func testErrorLine() {
         let e = events(from: ["dispread: Error - Instrument Access Failed\n"], chunkSize: 4096)
         let errors = e.compactMap { if case .error(let m) = $0 { return m } else { return nil } }

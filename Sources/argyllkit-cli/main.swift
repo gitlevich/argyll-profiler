@@ -134,6 +134,36 @@ do {
             print("\(p.url == current ? "*" : " ") \(p.isFactory ? "[factory] " : "")\(p.name)  —  \(p.url.path)")
         }
 
+    case "correct":
+        // argyllkit-cli correct --display N --colorimeter PORT --spectrometer PORT [--tech u] [--control PATH] OUT.ccmx
+        guard let display = value("--display", in: args).flatMap(Int.init),
+              let col = value("--colorimeter", in: args).flatMap(Int.init),
+              let spec = value("--spectrometer", in: args).flatMap(Int.init),
+              let out = args.last, out.hasSuffix(".ccmx") else { usage() }
+        let control = value("--control", in: args)
+        var options = CorrectionOptions(displayIndex: display, colorimeterPort: col, spectrometerPort: spec,
+                                        displayName: "display \(display)", descriptor: "argyllkit-cli correction",
+                                        outputURL: URL(fileURLWithPath: out))
+        options.displayTechnology = value("--tech", in: args) ?? "u"
+        let session = CorrectionSession(options: options)
+        let run = Task { try await session.run() }
+        for await event in session.events {
+            switch event {
+            case .line(let l): print("[ccxxmake] \(l)")
+            case .step(let s): print("STEP \(s.rawValue)")
+            case .progress(let d, let t): print("PROGRESS \(d)/\(t)")
+            case .prompt(let p):
+                print("PROMPT \(p)")
+                await waitForGo(control)
+                await session.answerPrompt()
+                print("answered")
+            case .exited(let c): print("EXIT \(c)")
+            }
+        }
+        let result = try await run.value
+        print("DONE \(result.url.path) avg=\(result.fitAverage ?? -1) max=\(result.fitMax ?? -1)")
+
+
     default:
         usage()
     }
