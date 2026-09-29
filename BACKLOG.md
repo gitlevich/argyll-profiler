@@ -9,6 +9,12 @@ per-step difference highlighted. Answers "is that a cast or my eyes?" with numbe
 The prototype is `/tmp/greycheck.swift` from 2026-09-28; it belongs in the app next to
 Compare, and could grow into a full profile inspector (white point, primaries, fit).
 
+## Profile name as an editable dropdown
+The Profile name field on the setup screen becomes a combo box: the suggested
+provenance name on top, then the existing profiles for the selected display (so a
+re-run can replace an earlier profile under the same name, or pick up a naming pattern),
+and free text still allowed. Selecting an existing name warns that it will be replaced.
+
 ## Inline instrument rename
 Replace the "Name…" button with click-to-edit on the instrument's label in the picker
 row: click the name, it becomes a text field, Return commits, Escape cancels. Same
