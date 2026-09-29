@@ -53,6 +53,13 @@ final class RunModel: ObservableObject {
     @Published var patchCount = store.object(forKey: "patchCount") as? Int ?? 175 { didSet { Self.store.set(patchCount, forKey: "patchCount") } }
     @Published var quality: Character = Character(store.string(forKey: "quality") ?? "m") { didSet { Self.store.set(String(quality), forKey: "quality") } }
     @Published var installProfile = store.object(forKey: "installProfile") as? Bool ?? true { didSet { Self.store.set(installProfile, forKey: "installProfile") } }
+    /// Patch window: vertical position (0 top, 0.5 centre, 1 bottom) and scale (1 normal, 2 large, 3 huge).
+    @Published var patchVertical = store.object(forKey: "patchVertical") as? Double ?? 0.5 { didSet { Self.store.set(patchVertical, forKey: "patchVertical") } }
+    @Published var patchScale = store.object(forKey: "patchScale") as? Double ?? 1.0 { didSet { Self.store.set(patchScale, forKey: "patchScale") } }
+
+    var patchWindow: ProfilingOptions.PatchWindow? {
+        (patchVertical == 0.5 && patchScale == 1.0) ? nil : ProfilingOptions.PatchWindow(horizontal: 0.5, vertical: patchVertical, scale: patchScale)
+    }
     @Published var skipInstrumentCalibration = store.bool(forKey: "skipInstrumentCalibration") { didSet { Self.store.set(skipInstrumentCalibration, forKey: "skipInstrumentCalibration") } }
 
     private func rememberSelection() {
@@ -122,6 +129,7 @@ final class RunModel: ObservableObject {
                                         descriptor: "\(selectedInstrumentName) on \(selectedDisplayName), \(spectrometerName) reference, \(f.string(from: Date()))",
                                         outputURL: url)
         options.displayTechnology = displayTechnology
+        options.patchWindow = patchWindow
         let session = CorrectionSession(options: options)
         correction = session
         correctionStarted = true
@@ -437,6 +445,7 @@ final class RunModel: ObservableObject {
         options.quality = quality
         options.installProfile = installProfile
         options.skipInstrumentCalibrationIfPossible = skipInstrumentCalibration
+        options.patchWindow = patchWindow
         if let correction = correctionFile {
             options.displayType = "n"              // the matrix was made on the base calibration
             options.correctionFile = correction

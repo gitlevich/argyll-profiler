@@ -22,6 +22,21 @@ public struct ProfilingOptions: Sendable {
     /// Colorimeter correction matrix or spectral set (-X file.ccmx / .ccss), made with
     /// ccxxmake against a spectrophotometer for one display + colorimeter pair.
     public var correctionFile: URL? = nil
+    /// Where the patch window goes and how big it is (dispcal/dispread/ccxxmake -P):
+    /// horizontal and vertical position 0…1 (0.5 = centre, 1 = bottom/right), scale 1 = default.
+    /// A big instrument on a tilted laptop screen wants it low and large.
+    public var patchWindow: PatchWindow? = nil
+
+    public struct PatchWindow: Sendable, Equatable {
+        public var horizontal: Double = 0.5
+        public var vertical: Double = 0.5
+        public var scale: Double = 1.0
+        public init(horizontal: Double = 0.5, vertical: Double = 0.5, scale: Double = 1.0) {
+            self.horizontal = horizontal; self.vertical = vertical; self.scale = scale
+        }
+        public var argument: String { String(format: "-P%.2f,%.2f,%.1f", horizontal, vertical, scale) }
+    }
+
     /// nil profiles the display as it is. That is the right choice for a Studio Display
     /// sitting in an Apple reference preset: no gamma-table curves, just a description
     /// of what the display does. Set it to run dispcal first and embed vcgt curves.
@@ -114,6 +129,7 @@ public actor ProfilingSession {
         if options.skipInstrumentCalibrationIfPossible { measureFlags.append("-N") }
         if let type = options.displayType { measureFlags.append("-y\(type)") }
         if let correction = options.correctionFile { measureFlags += ["-X", correction.path] }
+        if let window = options.patchWindow { measureFlags.append(window.argument) }
         // dispcal and dispread draw patches either on the chosen display or via the web server.
         let patchTarget = options.patchServerPort.map { "-dweb:\($0)" } ?? display
 

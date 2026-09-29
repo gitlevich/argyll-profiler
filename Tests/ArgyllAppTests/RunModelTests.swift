@@ -148,6 +148,16 @@ final class RunModelTests: XCTestCase {
         XCTAssertTrue(w.cct > 4500 && w.cct < 9000, "\(w)")
     }
 
+    func testPatchWindowArgument() {
+        XCTAssertEqual(ProfilingOptions.PatchWindow(horizontal: 0.5, vertical: 1.0, scale: 2).argument, "-P0.50,1.00,2.0")
+        let model = RunModel()
+        model.patchVertical = 0.5; model.patchScale = 1.0
+        XCTAssertNil(model.patchWindow, "defaults mean no -P at all")
+        model.patchVertical = 1.0; model.patchScale = 3.0
+        XCTAssertEqual(model.patchWindow?.argument, "-P0.50,1.00,3.0")
+        model.patchVertical = 0.5; model.patchScale = 1.0
+    }
+
     func testFailedRunStillDrainsEvents() async throws {
         let model = RunModel()
         var continuation: AsyncStream<(ProfilingSession.Stage, ArgyllEvent)>.Continuation!

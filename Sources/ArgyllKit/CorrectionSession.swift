@@ -10,6 +10,8 @@ public struct CorrectionOptions: Sendable {
     public var displayName: String
     public var descriptor: String
     public var outputURL: URL
+    /// Patch window position and size (-P), same meaning as ProfilingOptions.patchWindow.
+    public var patchWindow: ProfilingOptions.PatchWindow? = nil
 
     public init(displayIndex: Int, colorimeterPort: Int, spectrometerPort: Int, displayName: String, descriptor: String, outputURL: URL) {
         self.displayIndex = displayIndex
@@ -96,8 +98,9 @@ public actor CorrectionSession {
         try? FileManager.default.removeItem(at: options.outputURL)
 
         // -yn: the matrix must be made on the colorimeter's base calibration (Argyll refuses others).
-        let args = ["-v", "-t\(options.displayTechnology)", "-d\(options.displayIndex)", "-yn",
-                    "-I", options.displayName, "-E", options.descriptor, options.outputURL.lastPathComponent]
+        var args = ["-v", "-t\(options.displayTechnology)", "-d\(options.displayIndex)", "-yn"]
+        if let window = options.patchWindow { args.append(window.argument) }
+        args += ["-I", options.displayName, "-E", options.descriptor, options.outputURL.lastPathComponent]
         let runner = try ArgyllRunner(tool: "ccxxmake", arguments: args, workingDirectory: directory.path)
         self.runner = runner
         continuation.yield(.step(.colorimeter))

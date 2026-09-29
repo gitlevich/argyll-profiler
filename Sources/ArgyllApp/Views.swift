@@ -147,6 +147,21 @@ struct SetupView: View {
                         Text("Thorough · 400").tag(400)
                     }
                     .pickerStyle(.segmented)
+                    Picker("Patch window", selection: $model.patchVertical) {
+                        Text("Top").tag(0.0)
+                        Text("Centre").tag(0.5)
+                        Text("Bottom").tag(1.0)
+                    }
+                    .pickerStyle(.segmented)
+                    Picker("Patch size", selection: $model.patchScale) {
+                        Text("Normal").tag(1.0)
+                        Text("Large").tag(2.0)
+                        Text("Huge").tag(3.0)
+                    }
+                    .pickerStyle(.segmented)
+                    Text("Where the measuring window appears on the display. A large instrument on a tilted laptop screen wants it low and large so it can rest on the patch.")
+                        .font(.caption).foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
                     Picker("Quality", selection: $model.quality) {
                         Text("Low").tag(Character("l"))
                         Text("Medium").tag(Character("m"))
