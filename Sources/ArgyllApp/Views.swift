@@ -47,6 +47,15 @@ struct SetupView: View {
                                 NicknameEditor(initial: model.selectedInstrumentName) { model.setNickname($0); showNickname = false }
                             }
                     }
+                    if model.selectedInstrument.map({ RunModel.instrumentKind($0.name) }) == .colorimeter {
+                        if let correction = model.correctionDescription {
+                            Label("Correction matrix: \(correction)", systemImage: "checkmark.seal")
+                                .font(.caption).foregroundStyle(.secondary)
+                        } else {
+                            Label("No correction matrix for this colorimeter on this display; Argyll's generic calibration will be used. Saturated colours may be off.", systemImage: "exclamationmark.triangle")
+                                .font(.caption).foregroundStyle(.secondary)
+                        }
+                    }
                     HStack {
                         if let error = model.discoveryError {
                             Text(error).font(.caption).foregroundStyle(.red)

@@ -88,13 +88,31 @@ do {
         print("DONE \(url.path)")
 
     case "run":
+        // With --keys PATH the tool is driven by a key file instead of prompt detection:
+        // whenever PATH appears its contents are sent as keystrokes (empty file = Return)
+        // and it is deleted. Needed for menu-driven tools such as ccxxmake.
         guard let sep = args.firstIndex(of: "--"), sep + 1 < args.count else { usage() }
         let control = value("--control", in: Array(args[..<sep]))
+        let keyFile = value("--keys", in: Array(args[..<sep]))
         let tool = args[sep + 1]
         let toolArgs = Array(args[(sep + 2)...])
         let runner = try ArgyllRunner(tool: tool, arguments: toolArgs,
                                       workingDirectory: FileManager.default.currentDirectoryPath)
+        if let keyFile {
+            Task {
+                while true {
+                    if let data = FileManager.default.contents(atPath: keyFile) {
+                        try? FileManager.default.removeItem(atPath: keyFile)
+                        let keys = String(decoding: data, as: UTF8.self).trimmingCharacters(in: .newlines)
+                        print("[\(tool)] SEND \(keys.isEmpty ? "<return>" : keys)")
+                        runner.send(keys.isEmpty ? "\r" : keys)
+                    }
+                    try? await Task.sleep(nanoseconds: 300_000_000)
+                }
+            }
+        }
         for await event in runner.events {
+            if keyFile != nil, case .prompt(let p) = event { print("[\(tool)] PROMPT \(p)"); continue }
             await report(tool, event, control: control) { runner.answerPrompt() }
         }
 

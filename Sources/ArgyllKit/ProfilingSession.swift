@@ -16,6 +16,12 @@ public struct ProfilingOptions: Sendable {
     /// -N: reuse the instrument's last white-tile calibration if Argyll still considers
     /// it valid, so a run can start with the instrument already on the display.
     public var skipInstrumentCalibrationIfPossible: Bool = false
+    /// Colorimeter display type (dispread/dispcal -y). Leave nil for spectrophotometers
+    /// and for Argyll's default; use "n" (base, non-refresh) together with a correction matrix.
+    public var displayType: String? = nil
+    /// Colorimeter correction matrix or spectral set (-X file.ccmx / .ccss), made with
+    /// ccxxmake against a spectrophotometer for one display + colorimeter pair.
+    public var correctionFile: URL? = nil
     /// nil profiles the display as it is. That is the right choice for a Studio Display
     /// sitting in an Apple reference preset: no gamma-table curves, just a description
     /// of what the display does. Set it to run dispcal first and embed vcgt curves.
@@ -95,6 +101,8 @@ public actor ProfilingSession {
         var measureFlags: [String] = []
         if options.hiRes { measureFlags.append("-H") }
         if options.skipInstrumentCalibrationIfPossible { measureFlags.append("-N") }
+        if let type = options.displayType { measureFlags.append("-y\(type)") }
+        if let correction = options.correctionFile { measureFlags += ["-X", correction.path] }
         // dispcal and dispread draw patches either on the chosen display or via the web server.
         let patchTarget = options.patchServerPort.map { "-dweb:\($0)" } ?? display
 

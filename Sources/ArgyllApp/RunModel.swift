@@ -198,8 +198,32 @@ final class RunModel: ObservableObject {
         let f = DateFormatter()
         f.dateFormat = "yyyy-MM-dd HH:mm"
         let mode = calibrate ? "calibrated \(whitePointKelvin == 0 ? "native" : "\(whitePointKelvin) K") gamma \(gamma)" : "profile only"
-        let text = "\(selectedDisplayName), \(selectedInstrumentDescription), \(f.string(from: date)) (Argyll Profiler \(Self.appVersion), \(mode), \(patchCount) patches)"
+        let corrected = correctionFile != nil ? ", matrix-corrected" : ""
+        let text = "\(selectedDisplayName), \(selectedInstrumentDescription), \(f.string(from: date)) (Argyll Profiler \(Self.appVersion), \(mode), \(patchCount) patches\(corrected))"
         return String(text.unicodeScalars.map { $0.isASCII ? Character($0) : "-" })
+    }
+
+    static func correctionsDirectory() -> URL {
+        let base = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first!
+        return base.appendingPathComponent("ArgyllApp/Corrections", isDirectory: true)
+    }
+
+    /// The correction matrix for the selected display + colorimeter, if one has been made:
+    /// Corrections/<DisplayToken>_<InstrumentToken>.ccmx, e.g. StudioDisplay_CalibriteDisplayPlusHL.ccmx.
+    var correctionFile: URL? {
+        guard let i = selectedInstrument, Self.instrumentKind(i.name) == .colorimeter else { return nil }
+        let url = Self.correctionsDirectory()
+            .appendingPathComponent("\(Self.token(selectedDisplayName))_\(Self.token(selectedInstrumentName)).ccmx")
+        return FileManager.default.fileExists(atPath: url.path) ? url : nil
+    }
+
+    /// Descriptor line inside the .ccmx, for the setup screen.
+    var correctionDescription: String? {
+        guard let url = correctionFile, let text = try? String(contentsOf: url, encoding: .utf8) else { return nil }
+        for line in text.split(separator: "\n") where line.hasPrefix("DESCRIPTOR") {
+            return line.replacingOccurrences(of: "DESCRIPTOR", with: "").trimmingCharacters(in: CharacterSet(charactersIn: " \""))
+        }
+        return url.lastPathComponent
     }
 
     static func runsDirectory() -> URL {
@@ -279,6 +303,10 @@ final class RunModel: ObservableObject {
         options.quality = quality
         options.installProfile = installProfile
         options.skipInstrumentCalibrationIfPossible = skipInstrumentCalibration
+        if let correction = correctionFile {
+            options.displayType = "n"              // the matrix was made on the base calibration
+            options.correctionFile = correction
+        }
         options.profileDescription = profileDescription()
         options.deviceModel = selectedDisplayName
         options.copyright = "Made with Argyll Profiler \(Self.appVersion) and ArgyllCMS, measured with \(selectedInstrumentDescription)"

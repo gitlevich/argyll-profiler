@@ -135,6 +135,8 @@ public final class ArgyllRunner {
     }
 
     public func answerPrompt() { process.pressAnyKey() }
+    /// Raw keystrokes, for Argyll's menu-driven tools (ccxxmake, dispcal's adjustment menu).
+    public func send(_ keys: String) { process.send(keys) }
     public func abort() { process.sendEscape() }
     public func kill() { process.terminate() }
 }
