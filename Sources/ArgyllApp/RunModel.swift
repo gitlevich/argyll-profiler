@@ -42,17 +42,23 @@ final class RunModel: ObservableObject {
     @Published var discoveryError: String?
     @Published var discovering = false
 
-    // Setup choices
-    @Published var displayIndex = 1 { didSet { refreshSuggestedName() } }
-    @Published var instrumentPort = 1 { didSet { refreshSuggestedName() } }
+    // Setup choices, remembered between launches.
+    private static let store = UserDefaults.standard
+    @Published var displayIndex = 1 { didSet { refreshSuggestedName(); rememberSelection() } }
+    @Published var instrumentPort = 1 { didSet { refreshSuggestedName(); rememberSelection() } }
     @Published var profileName = ""
-    @Published var calibrate = false
-    @Published var whitePointKelvin = 6500          // 0 = native
-    @Published var gamma = 2.2
-    @Published var patchCount = 175
-    @Published var quality: Character = "m"
-    @Published var installProfile = true
-    @Published var skipInstrumentCalibration = false
+    @Published var calibrate = store.bool(forKey: "calibrate") { didSet { Self.store.set(calibrate, forKey: "calibrate") } }
+    @Published var whitePointKelvin = store.object(forKey: "whitePointKelvin") as? Int ?? 6500 { didSet { Self.store.set(whitePointKelvin, forKey: "whitePointKelvin") } }   // 0 = native
+    @Published var gamma = store.object(forKey: "gamma") as? Double ?? 2.2 { didSet { Self.store.set(gamma, forKey: "gamma") } }
+    @Published var patchCount = store.object(forKey: "patchCount") as? Int ?? 175 { didSet { Self.store.set(patchCount, forKey: "patchCount") } }
+    @Published var quality: Character = Character(store.string(forKey: "quality") ?? "m") { didSet { Self.store.set(String(quality), forKey: "quality") } }
+    @Published var installProfile = store.object(forKey: "installProfile") as? Bool ?? true { didSet { Self.store.set(installProfile, forKey: "installProfile") } }
+    @Published var skipInstrumentCalibration = store.bool(forKey: "skipInstrumentCalibration") { didSet { Self.store.set(skipInstrumentCalibration, forKey: "skipInstrumentCalibration") } }
+
+    private func rememberSelection() {
+        if let d = displays.first(where: { $0.index == displayIndex }) { Self.store.set(Self.shortName(d.name), forKey: "lastDisplay") }
+        if let i = selectedInstrument { Self.store.set(i.name, forKey: "lastInstrument") }
+    }
 
     // Run state
     @Published var phase: Phase = .setup
@@ -278,13 +284,17 @@ final class RunModel: ObservableObject {
             // Bluetooth and audio devices, never a colour instrument. USB/HID entries only.
             instruments = try await Argyll.instruments().filter { !$0.name.hasPrefix("/dev/") }
             discoveryError = nil
-            // First time through, prefer an external display: that is what people profile.
+            // First time through, prefer what was used last, else an external display.
             if firstDiscovery || !displays.contains(where: { $0.index == displayIndex }) {
-                displayIndex = displays.first { !$0.name.localizedCaseInsensitiveContains("built-in") }?.index
+                let last = Self.store.string(forKey: "lastDisplay")
+                displayIndex = displays.first { Self.shortName($0.name) == last }?.index
+                    ?? displays.first { !$0.name.localizedCaseInsensitiveContains("built-in") }?.index
                     ?? displays.first?.index ?? 1
             }
-            if !instruments.contains(where: { $0.port == instrumentPort }) {
-                instrumentPort = instruments.first { $0.name.localizedCaseInsensitiveContains("i1") }?.port
+            if firstDiscovery || !instruments.contains(where: { $0.port == instrumentPort }) {
+                let last = Self.store.string(forKey: "lastInstrument")
+                instrumentPort = instruments.first { $0.name == last }?.port
+                    ?? instruments.first { $0.name.localizedCaseInsensitiveContains("i1") }?.port
                     ?? instruments.first?.port ?? 1
             }
             refreshSuggestedName()
