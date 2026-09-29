@@ -458,20 +458,21 @@ struct CompareView: View {
             Text("Comparing profiles on \(model.compareDisplayName)")
                 .font(.title3.weight(.semibold))
 
-            Grid(horizontalSpacing: 12, verticalSpacing: 8) {
-                GridRow {
-                    profilePicker(selection: $model.compareA)
-                    Spacer().frame(width: 44)
-                    profilePicker(selection: $model.compareB)
+            // Two rows on one skeleton: full-width column, fixed 48-pt middle, full-width column.
+            VStack(spacing: 8) {
+                HStack(spacing: 12) {
+                    profilePicker("A", selection: $model.compareA)
+                    Color.clear.frame(width: 48, height: 1)
+                    profilePicker("B", selection: $model.compareB)
                 }
-                GridRow {
+                HStack(spacing: 12) {
                     showButton("A", url: model.compareA)
                     Button {
                         model.toggleCompare()
                     } label: {
                         Image(systemName: "arrow.left.arrow.right")
                             .font(.body.weight(.semibold))
-                            .frame(width: 44, height: 26)
+                            .frame(width: 48, height: 24)
                     }
                     .buttonStyle(.bordered)
                     .keyboardShortcut(.space, modifiers: [])
@@ -479,7 +480,6 @@ struct CompareView: View {
                     showButton("B", url: model.compareB)
                 }
             }
-            .padding(.horizontal, 2)
 
             ZStack {
                 if let image = model.renderedImage ?? model.referenceImage {
@@ -492,7 +492,7 @@ struct CompareView: View {
                     RoundedRectangle(cornerRadius: 8).strokeBorder(.tint, lineWidth: 3)
                 }
             }
-            .frame(maxWidth: .infinity, minHeight: 220, maxHeight: 380)
+            .frame(maxWidth: .infinity, minHeight: 260, maxHeight: 520)
             .clipShape(RoundedRectangle(cornerRadius: 8))
             .dropDestination(for: URL.self) { urls, _ in
                 guard let url = urls.first else { return false }
@@ -506,13 +506,9 @@ struct CompareView: View {
                 Button("Choose…") { model.chooseReferenceImage() }.controlSize(.small)
                 Button("Built-in patches") { model.referenceImage = TestImage.make() }.controlSize(.small)
                 Spacer()
-                Text("Space switches · A and B keys select")
+                Text("Converted through the active profile, as Lightroom does. Space switches, A and B select.")
                     .font(.caption).foregroundStyle(.secondary)
             }
-
-            Text("The image is converted through the active profile, the way Lightroom does it. Whichever is active stays when you leave.")
-                .font(.caption)
-                .foregroundStyle(.secondary)
 
             DisclosureGroup("Numbers", isExpanded: $showNumbers) {
                 NumbersView(a: model.compareA, b: model.compareB)
@@ -530,14 +526,17 @@ struct CompareView: View {
         .padding(24)
     }
 
-    private func profilePicker(selection: Binding<URL?>) -> some View {
-        Picker(selection: selection) {
-            ForEach(model.compareProfiles) { p in
-                Text(RunModel.compactLabel(p)).tag(Optional(p.url))
-            }
-        } label: { EmptyView() }
-        .labelsHidden()
-        .help(model.profileName(for: selection.wrappedValue))
+    private func profilePicker(_ label: String, selection: Binding<URL?>) -> some View {
+        HStack(spacing: 8) {
+            Text(label).font(.headline).foregroundStyle(.secondary).frame(width: 14)
+            Picker(selection: selection) {
+                ForEach(model.compareProfiles) { p in
+                    Text(RunModel.compactLabel(p)).tag(Optional(p.url))
+                }
+            } label: { EmptyView() }
+            .labelsHidden()
+            .help(model.profileName(for: selection.wrappedValue))
+        }
         .frame(maxWidth: .infinity)
     }
 
