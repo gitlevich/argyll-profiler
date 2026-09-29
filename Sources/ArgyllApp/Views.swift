@@ -17,7 +17,7 @@ struct RootView: View {
             case .failed(let message): FailedView(message: message)
             }
         }
-        .frame(minWidth: 720, idealWidth: 720, minHeight: 700, idealHeight: 760)
+        .frame(minWidth: 720, idealWidth: 760, minHeight: 700, idealHeight: 900)
         .task { await model.discoverIfNeeded() }
     }
 }
