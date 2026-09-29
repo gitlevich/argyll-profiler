@@ -70,6 +70,12 @@ struct SetupView: View {
                         Text("Calibrate, then profile").tag(true)
                     }
                     .pickerStyle(.segmented)
+                    Text(model.calibrate
+                         ? "Calibrate changes the display: Argyll builds correction curves that bend every pixel toward the white point and gamma below, then measures the result. Use it only for a display that has no preset of its own for the white you want."
+                         : "Profile only leaves the display exactly as it is and measures it. The profile tells colour-managed apps how this panel behaves so they can show images correctly. Right choice when the display already has the white point you want, e.g. an Apple preset.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
                     if model.calibrate {
                         Picker("White point", selection: $model.whitePointKelvin) {
                             Text("Native").tag(0)
@@ -122,8 +128,8 @@ struct SetupView: View {
 
     private var footnote: String {
         model.calibrate
-            ? "Calibration writes gamma-table curves into the profile."
-            : "The display is measured as it is. Set it to its Apple default profile first."
+            ? "On this macOS the curves may not survive a display reconnect."
+            : "Before starting, set the display to its Apple factory profile so no old curves are measured."
     }
 }
 
