@@ -12,6 +12,17 @@ public struct CorrectionOptions: Sendable {
     public var outputURL: URL
     /// Patch window position and size (-P), same meaning as ProfilingOptions.patchWindow.
     public var patchWindow: ProfilingOptions.PatchWindow? = nil
+    /// -N: reuse the spectrophotometer's last white-tile calibration if Argyll still considers it valid.
+    public var skipInstrumentCalibrationIfPossible: Bool = false
+
+    /// The ccxxmake argument list this configuration produces (exposed for tests).
+    public var arguments: [String] {
+        var args = ["-v", "-t\(displayTechnology)", "-d\(displayIndex)", "-yn"]
+        if skipInstrumentCalibrationIfPossible { args.append("-N") }
+        if let window = patchWindow { args.append(window.argument) }
+        args += ["-I", displayName, "-E", descriptor, outputURL.lastPathComponent]
+        return args
+    }
 
     public init(displayIndex: Int, colorimeterPort: Int, spectrometerPort: Int, displayName: String, descriptor: String, outputURL: URL) {
         self.displayIndex = displayIndex
@@ -98,10 +109,7 @@ public actor CorrectionSession {
         try? FileManager.default.removeItem(at: options.outputURL)
 
         // -yn: the matrix must be made on the colorimeter's base calibration (Argyll refuses others).
-        var args = ["-v", "-t\(options.displayTechnology)", "-d\(options.displayIndex)", "-yn"]
-        if let window = options.patchWindow { args.append(window.argument) }
-        args += ["-I", options.displayName, "-E", options.descriptor, options.outputURL.lastPathComponent]
-        let runner = try ArgyllRunner(tool: "ccxxmake", arguments: args, workingDirectory: directory.path)
+        let runner = try ArgyllRunner(tool: "ccxxmake", arguments: options.arguments, workingDirectory: directory.path)
         self.runner = runner
         continuation.yield(.step(.colorimeter))
 

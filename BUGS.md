@@ -97,3 +97,14 @@ why; (2) Start asks for confirmation when a colorimeter is used on a display it 
 matrix for. Also learned: the built-in display, unlike the Studio Display, applies the
 assigned profile system-wide.
 Test: `ProfilingSanityTests.testMeasuredWhiteIsReadFromTi3`.
+
+## 9. Matrix flow always asked for the white tile; window shrank between screens — fixed 2026-09-29
+
+"Reuse the instrument's last white calibration" was only passed to the profiling tools,
+never to ccxxmake, so the spectrophotometer was asked for its tile in every matrix run.
+Separately, `.windowResizability(.contentSize)` made the window follow each screen's
+ideal size, so switching Setup ↔ Compare resized it.
+
+Fix: CorrectionOptions carries the flag (-N) and exposes its argument list;
+`.contentMinSize` keeps the user's window size.
+Test: `RunModelTests.testCorrectionPassesReuseCalibrationFlag`.

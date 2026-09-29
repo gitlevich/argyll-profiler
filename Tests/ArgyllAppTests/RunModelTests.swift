@@ -158,6 +158,18 @@ final class RunModelTests: XCTestCase {
         model.patchVertical = 0.5; model.patchScale = 1.0
     }
 
+    /// BUGS.md #9: the matrix flow must honour "reuse the instrument's last calibration".
+    func testCorrectionPassesReuseCalibrationFlag() {
+        var o = CorrectionOptions(displayIndex: 2, colorimeterPort: 1, spectrometerPort: 2,
+                                  displayName: "Studio Display", descriptor: "d", outputURL: URL(fileURLWithPath: "/tmp/x.ccmx"))
+        XCTAssertFalse(o.arguments.contains("-N"))
+        o.skipInstrumentCalibrationIfPossible = true
+        XCTAssertTrue(o.arguments.contains("-N"))
+        o.patchWindow = ProfilingOptions.PatchWindow(horizontal: 0.5, vertical: 1, scale: 3)
+        XCTAssertTrue(o.arguments.contains("-P0.50,1.00,3.0"))
+        XCTAssertEqual(o.arguments.last, "x.ccmx")
+    }
+
     func testFailedRunStillDrainsEvents() async throws {
         let model = RunModel()
         var continuation: AsyncStream<(ProfilingSession.Stage, ArgyllEvent)>.Continuation!

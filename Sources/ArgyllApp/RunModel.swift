@@ -132,6 +132,7 @@ final class RunModel: ObservableObject {
                                         outputURL: url)
         options.displayTechnology = displayTechnology
         options.patchWindow = patchWindow
+        options.skipInstrumentCalibrationIfPossible = skipInstrumentCalibration
         let session = CorrectionSession(options: options)
         correction = session
         correctionStarted = true

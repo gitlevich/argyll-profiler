@@ -28,6 +28,6 @@ struct ArgyllProfilerApp: App {
                 .environmentObject(model)
                 .onAppear { delegate.model = model }
         }
-        .windowResizability(.contentSize)
+        .windowResizability(.contentMinSize)   // keep the user's window size across screens
     }
 }
