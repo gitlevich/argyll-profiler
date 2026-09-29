@@ -3,10 +3,12 @@
 #
 #   Scripts/release.sh                -> .build/Argyll-Profiler-<version>.dmg (notarized, stapled)
 #
-# One-time setup (stores an app-specific password in the keychain under the profile name):
-#   xcrun notarytool store-credentials ArgyllProfiler \
-#       --apple-id <your Apple ID email> --team-id YBCP8WY4VN --password <app-specific password>
-# App-specific passwords: https://appleid.apple.com > Sign-In and Security > App-Specific Passwords
+# Notarization credentials, one of:
+#   - locally: a keychain profile (default name ArgyllProfiler), created once with
+#       xcrun notarytool store-credentials ArgyllProfiler \
+#           --apple-id <your Apple ID email> --team-id <TEAM ID> --password <app-specific password>
+#   - CI: APPLE_ID, APPLE_APP_PASSWORD and APPLE_TEAM_ID in the environment.
+# App-specific passwords: account.apple.com > Sign-In and Security > App-Specific Passwords
 set -e
 cd "$(dirname "$0")/.."
 
@@ -18,16 +20,26 @@ STAGE=".build/dmg-stage"
 
 Scripts/make-app.sh
 
+IDENTITY="${IDENTITY:-$(security find-identity -v -p codesigning | grep -o '"Developer ID Application: [^"]*"' | head -1 | tr -d '"')}"
+[ -n "$IDENTITY" ] || { echo "no Developer ID Application certificate available" >&2; exit 1; }
+
 # DMG with the app and an Applications shortcut.
 rm -rf "$STAGE" "$DMG"
 mkdir -p "$STAGE"
 ditto "$APP" "$STAGE/Argyll Profiler.app"
 ln -s /Applications "$STAGE/Applications"
 hdiutil create -volname "Argyll Profiler" -srcfolder "$STAGE" -ov -format UDZO "$DMG" >/dev/null
-codesign --force --sign "$(security find-identity -v -p codesigning | grep -o '"Developer ID Application: [^"]*"' | head -1 | tr -d '"')" "$DMG"
+codesign --force --timestamp --sign "$IDENTITY" "$DMG"
+
+if [ -n "$APPLE_ID" ] && [ -n "$APPLE_APP_PASSWORD" ] && [ -n "$APPLE_TEAM_ID" ]; then
+    NOTARY_AUTH="--apple-id $APPLE_ID --password $APPLE_APP_PASSWORD --team-id $APPLE_TEAM_ID"
+else
+    NOTARY_AUTH="--keychain-profile $PROFILE"
+fi
 
 echo "submitting to Apple notary service (a few minutes)…"
-xcrun notarytool submit "$DMG" --keychain-profile "$PROFILE" --wait
+# shellcheck disable=SC2086
+xcrun notarytool submit "$DMG" $NOTARY_AUTH --wait
 xcrun stapler staple "$DMG"
 spctl --assess --type open --context context:primary-signature "$DMG" && echo "Gatekeeper: accepted"
 

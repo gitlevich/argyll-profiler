@@ -58,3 +58,25 @@ Argyll also supports `ARGYLL_NOT_INTERACTIVE=1`, which makes prompts read a full
 ## Before trusting the parser
 
 Run `spotread -?` and one real `dispread` in Terminal with the instrument attached and check the exact wording of the tile and display prompts against the regexes in `ArgyllOutputParser`. The `.other` case catches anything that doesn't match without breaking the flow.
+
+
+## Releasing
+
+Locally: `Scripts/release.sh` builds the app with ArgyllCMS bundled from Homebrew, signs
+it with the Developer ID certificate in your keychain, notarizes it, staples the ticket
+and produces `.build/Argyll-Profiler-<version>.dmg`.
+
+On GitHub: push a tag `vX.Y` and `.github/workflows/release.yml` does the same on an
+Apple silicon runner and attaches the DMG to a GitHub Release. It needs these repository
+secrets (Settings > Secrets and variables > Actions):
+
+- `MACOS_CERTIFICATE_P12` — your "Developer ID Application" certificate with its private
+  key, exported from Keychain Access as .p12 and base64-encoded: `base64 -i cert.p12 | pbcopy`
+- `MACOS_CERTIFICATE_PASSWORD` — the password you set when exporting the .p12
+- `KEYCHAIN_PASSWORD` — any string; protects the temporary keychain on the runner
+- `APPLE_ID` — the Apple ID of the developer account
+- `APPLE_APP_PASSWORD` — an app-specific password for that account
+- `APPLE_TEAM_ID` — the ten-character team ID on the certificate
+
+The version in `Resources/Info.plist` is overwritten from the tag, so tag from `main` and
+don't bump it by hand.
