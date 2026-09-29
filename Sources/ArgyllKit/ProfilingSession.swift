@@ -181,9 +181,11 @@ public actor ProfilingSession {
     static func measuredWhite(in ti3: URL) -> (x: Double, y: Double)? {
         guard let text = try? String(contentsOf: ti3, encoding: .utf8) else { return nil }
         var inData = false
-        for line in text.split(separator: "\n") {
-            if line.hasPrefix("BEGIN_DATA") { inData = true; continue }
-            if line.hasPrefix("END_DATA") { break }
+        for raw in text.components(separatedBy: .newlines) {
+            let line = raw.trimmingCharacters(in: .whitespaces)
+            // Exact matches: a .ti3 also has BEGIN_DATA_FORMAT / END_DATA_FORMAT before the data.
+            if line == "BEGIN_DATA" { inData = true; continue }
+            if line == "END_DATA" { break }
             guard inData else { continue }
             let f = line.split(separator: " ").compactMap { Double($0) }
             guard f.count >= 7, f[1] == 100, f[2] == 100, f[3] == 100 else { continue }
