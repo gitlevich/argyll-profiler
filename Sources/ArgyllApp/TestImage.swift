@@ -6,7 +6,7 @@ import ColorSync
 /// colours, a grey ramp. Drawn in sRGB so AppKit colour-manages it through whichever
 /// display profile is active, exactly like a photo would be.
 enum TestImage {
-    static func make(width: Int = 1200, height: Int = 800) -> NSImage {
+    static func make(width: Int = 2000, height: Int = 1000) -> NSImage {
         let cs = CGColorSpace(name: CGColorSpace.sRGB)!
         let ctx = CGContext(data: nil, width: width, height: height, bitsPerComponent: 8, bytesPerRow: 0,
                             space: cs, bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue)!
@@ -25,18 +25,20 @@ enum TestImage {
             }
         }
 
-        // Rows from the top (CG origin is bottom-left).
-        let rh = h * 0.19
-        row([(1, 0, 0), (0, 1, 0), (0, 0, 1), (0, 1, 1), (1, 0, 1), (1, 1, 0)], y: h - h * 0.05 - rh, height: rh)
+        // Four rows from the top (CG origin is bottom-left), equal height, even gaps.
+        let gap = h * 0.04
+        let rh = (h - 5 * gap) / 4
+        func rowY(_ i: Int) -> CGFloat { h - gap - CGFloat(i + 1) * rh - CGFloat(i) * gap }
+        row([(1, 0, 0), (0, 1, 0), (0, 0, 1), (0, 1, 1), (1, 0, 1), (1, 1, 0)], y: rowY(0), height: rh)
         // Memory colours: light skin, dark skin, sky, foliage, sand, red apple, denim, warm grey.
         row([(0.90, 0.72, 0.62), (0.45, 0.30, 0.22), (0.50, 0.70, 0.90), (0.32, 0.50, 0.24),
              (0.87, 0.78, 0.58), (0.70, 0.12, 0.10), (0.24, 0.32, 0.55), (0.62, 0.58, 0.54)],
-            y: h - h * 0.29 - rh, height: rh)
+            y: rowY(1), height: rh)
         // Grey ramp, 11 steps.
-        row((0...10).map { let v = CGFloat($0) / 10; return (v, v, v) }, y: h - h * 0.53 - rh, height: rh)
+        row((0...10).map { let v = CGFloat($0) / 10; return (v, v, v) }, y: rowY(2), height: rh)
         // Near-neutrals, where a white point error shows first.
         row([(0.95, 0.95, 0.95), (0.96, 0.95, 0.94), (0.94, 0.95, 0.96), (0.80, 0.80, 0.80), (0.81, 0.80, 0.79), (0.79, 0.80, 0.81)],
-            y: h * 0.05, height: rh * 0.8)
+            y: rowY(3), height: rh)
 
         let image = ctx.makeImage()!
         return NSImage(cgImage: image, size: NSSize(width: width / 2, height: height / 2))

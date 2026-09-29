@@ -488,7 +488,7 @@ struct CompareView: View {
                     RoundedRectangle(cornerRadius: 8).strokeBorder(.tint, lineWidth: 3)
                 }
             }
-            .frame(maxWidth: .infinity, minHeight: 260, maxHeight: 520)
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
             .clipShape(RoundedRectangle(cornerRadius: 8))
             .dropDestination(for: URL.self) { urls, _ in
                 guard let url = urls.first else { return false }
